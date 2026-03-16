@@ -47,7 +47,11 @@ func resolveTestDirFromRoot(root string) (string, error) {
 		}
 	}
 
-	return "", errors.New("test_dir not configured and none of the expected test directories exist")
+	if len(candidates) == 0 {
+		return "", errors.New("no test directory candidates available")
+	}
+
+	return candidates[0], nil
 }
 
 // returns the git root if in a git repo else current pwd
