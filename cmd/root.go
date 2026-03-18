@@ -1,9 +1,20 @@
 package cmd
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+	"os"
+	"os/exec"
+
+	"github.com/spf13/cobra"
+)
 
 // Run executes the miro CLI and returns a process exit code.
 func Run(args []string) int {
+	if err := ensureDependencies(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+
 	rootCmd := newRootCommand()
 	rootCmd.SetArgs(args)
 
@@ -26,4 +37,14 @@ func newRootCommand() *cobra.Command {
 	rootCmd.AddCommand(newInitCommand(), newRecordCommand())
 
 	return rootCmd
+}
+
+func ensureDependencies() error {
+	for _, name := range []string{"bwrap", "screen"} {
+		if _, err := exec.LookPath(name); err != nil {
+			return fmt.Errorf("required command %q not found in PATH", name)
+		}
+	}
+
+	return nil
 }

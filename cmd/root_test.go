@@ -12,6 +12,8 @@ import (
 )
 
 func TestRunShowsHelpWhenNoArgs(t *testing.T) {
+	addFakeRecordDependencies(t, "bwrap", "screen")
+
 	stdout, stderr := captureOutput(t, func() {
 		if got := Run(nil); got != 0 {
 			t.Fatalf("Run() code = %d, want %d", got, 0)
@@ -30,6 +32,8 @@ func TestRunShowsHelpWhenNoArgs(t *testing.T) {
 }
 
 func TestRunInit(t *testing.T) {
+	addFakeRecordDependencies(t, "bwrap", "screen")
+
 	stdout, stderr := captureOutput(t, func() {
 		if got := Run([]string{"init"}); got != 0 {
 			t.Fatalf("Run() code = %d, want %d", got, 0)
@@ -45,6 +49,8 @@ func TestRunInit(t *testing.T) {
 }
 
 func TestRunRecord(t *testing.T) {
+	addFakeRecordDependencies(t, "bwrap", "screen")
+
 	root := t.TempDir()
 	wantDir := filepath.Join(root, "e2e")
 	if err := os.MkdirAll(wantDir, 0o755); err != nil {
@@ -77,6 +83,8 @@ func TestRunRecord(t *testing.T) {
 }
 
 func TestRunRecordWithExplicitTestDirPath(t *testing.T) {
+	addFakeRecordDependencies(t, "bwrap", "screen")
+
 	root := t.TempDir()
 	wantDir := filepath.Join(root, "e2e")
 	if err := os.MkdirAll(wantDir, 0o755); err != nil {
@@ -105,6 +113,8 @@ func TestRunRecordWithExplicitTestDirPath(t *testing.T) {
 }
 
 func TestRunRecordRejectsAbsolutePathOutsideTestDir(t *testing.T) {
+	addFakeRecordDependencies(t, "bwrap", "screen")
+
 	root := t.TempDir()
 	wantDir := filepath.Join(root, "e2e")
 	if err := os.MkdirAll(wantDir, 0o755); err != nil {
@@ -131,7 +141,36 @@ func TestRunRecordRejectsAbsolutePathOutsideTestDir(t *testing.T) {
 	})
 }
 
+func TestRunFailsWhenDependenciesMissing(t *testing.T) {
+	root := t.TempDir()
+	wantDir := filepath.Join(root, "e2e")
+	if err := os.MkdirAll(wantDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	addFakeRecordDependencies(t, "screen")
+
+	withWorkingDir(t, root, func() {
+		stdout, stderr := captureOutput(t, func() {
+			if got := Run([]string{"init"}); got != 1 {
+				t.Fatalf("Run() code = %d, want %d", got, 1)
+			}
+		})
+
+		if stdout != "" {
+			t.Fatalf("stdout = %q, want empty", stdout)
+		}
+		if !strings.Contains(stderr, `required command "bwrap" not found in PATH`) {
+			t.Fatalf("stderr = %q, want missing dependency error", stderr)
+		}
+		if _, err := os.Stat(filepath.Join(wantDir, "suite", "spec")); !os.IsNotExist(err) {
+			t.Fatalf("Stat() error = %v, want not exists", err)
+		}
+	})
+}
+
 func TestRunRecordMissingPath(t *testing.T) {
+	addFakeRecordDependencies(t, "bwrap", "screen")
+
 	stdout, stderr := captureOutput(t, func() {
 		if got := Run([]string{"record"}); got != 1 {
 			t.Fatalf("Run() code = %d, want %d", got, 1)
@@ -150,6 +189,8 @@ func TestRunRecordMissingPath(t *testing.T) {
 }
 
 func TestRunInitExtraArgs(t *testing.T) {
+	addFakeRecordDependencies(t, "bwrap", "screen")
+
 	stdout, stderr := captureOutput(t, func() {
 		if got := Run([]string{"init", "extra"}); got != 1 {
 			t.Fatalf("Run() code = %d, want %d", got, 1)
@@ -168,6 +209,8 @@ func TestRunInitExtraArgs(t *testing.T) {
 }
 
 func TestRunUnknownCommand(t *testing.T) {
+	addFakeRecordDependencies(t, "bwrap", "screen")
+
 	stdout, stderr := captureOutput(t, func() {
 		if got := Run([]string{"wat"}); got != 1 {
 			t.Fatalf("Run() code = %d, want %d", got, 1)
@@ -246,4 +289,18 @@ func withWorkingDir(t *testing.T, dir string, fn func()) {
 	})
 
 	fn()
+}
+
+func addFakeRecordDependencies(t *testing.T, names ...string) {
+	t.Helper()
+
+	binDir := t.TempDir()
+	for _, name := range names {
+		path := filepath.Join(binDir, name)
+		if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", path, err)
+		}
+	}
+
+	t.Setenv("PATH", binDir)
 }
