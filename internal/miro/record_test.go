@@ -15,6 +15,7 @@ func TestRecordCreatesRelativePath(t *testing.T) {
 	root := t.TempDir()
 	testDir := filepath.Join(root, "e2e")
 	mustMkdirAll(t, testDir)
+	writeFile(t, filepath.Join(root, "miro.toml"), "test_dir = \"e2e\"\n")
 	addFakeRecordDependencies(t, "script")
 
 	got := withWorkingDir(t, root, func() string {
@@ -45,10 +46,11 @@ func TestRecordCreatesRelativePath(t *testing.T) {
 	}
 }
 
-func TestRecordStripsExplicitTestDirPrefix(t *testing.T) {
+func TestRecordAcceptsExplicitTestDirPrefix(t *testing.T) {
 	root := t.TempDir()
 	testDir := filepath.Join(root, "e2e")
 	mustMkdirAll(t, testDir)
+	writeFile(t, filepath.Join(root, "miro.toml"), "test_dir = \"e2e\"\n")
 	addFakeRecordDependencies(t, "script")
 
 	got := withWorkingDir(t, root, func() string {
@@ -79,6 +81,7 @@ func TestRecordStripsExplicitTestDirPrefix(t *testing.T) {
 func TestRecordRejectsAbsolutePathOutsideTestDir(t *testing.T) {
 	root := t.TempDir()
 	mustMkdirAll(t, filepath.Join(root, "e2e"))
+	writeFile(t, filepath.Join(root, "miro.toml"), "test_dir = \"e2e\"\n")
 	outside := filepath.Join(root, "outside", "a", "b", "c")
 
 	err := withWorkingDir(t, root, func() error {

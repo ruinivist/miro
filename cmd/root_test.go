@@ -32,19 +32,25 @@ func TestRunShowsHelpWhenNoArgs(t *testing.T) {
 }
 
 func TestRunInit(t *testing.T) {
-	addFakeRecordDependencies(t, "script", "bwrap", "bash")
+	root := t.TempDir()
 
-	stdout, stderr := captureOutput(t, func() {
-		if got := Run([]string{"init"}); got != 0 {
-			t.Fatalf("Run() code = %d, want %d", got, 0)
+	withWorkingDir(t, root, func() {
+		stdout, stderr := captureOutput(t, func() {
+			if got := Run([]string{"init"}); got != 0 {
+				t.Fatalf("Run() code = %d, want %d", got, 0)
+			}
+		})
+
+		if stdout != prefixed("Done initialising...\n") {
+			t.Fatalf("stdout = %q, want %q", stdout, prefixed("Done initialising...\n"))
+		}
+		if stderr != "" {
+			t.Fatalf("stderr = %q, want empty", stderr)
 		}
 	})
 
-	if stdout != prefixed("Done initialising...\n") {
-		t.Fatalf("stdout = %q, want %q", stdout, prefixed("Done initialising...\n"))
-	}
-	if stderr != "" {
-		t.Fatalf("stderr = %q, want empty", stderr)
+	if got := mustReadFile(t, filepath.Join(root, "miro.toml")); got != "test_dir = \"e2e\"\n" {
+		t.Fatalf("config = %q, want %q", got, "test_dir = \"e2e\"\n")
 	}
 }
 
@@ -56,6 +62,7 @@ func TestRunRecord(t *testing.T) {
 	if err := os.MkdirAll(wantDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
+	writeFile(t, filepath.Join(root, "miro.toml"), "test_dir = \"e2e\"\n")
 
 	withWorkingDir(t, root, func() {
 		withStdin(t, "y\n", func() {})
@@ -89,6 +96,7 @@ func TestRunRecordWithExplicitTestDirPath(t *testing.T) {
 	if err := os.MkdirAll(wantDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
+	writeFile(t, filepath.Join(root, "miro.toml"), "test_dir = \"e2e\"\n")
 
 	withWorkingDir(t, root, func() {
 		withStdin(t, "y\n", func() {})
@@ -120,6 +128,7 @@ func TestRunRecordRejectsAbsolutePathOutsideTestDir(t *testing.T) {
 	if err := os.MkdirAll(wantDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
+	writeFile(t, filepath.Join(root, "miro.toml"), "test_dir = \"e2e\"\n")
 
 	outside := filepath.Join(root, "outside", "spec")
 	withWorkingDir(t, root, func() {
@@ -141,12 +150,8 @@ func TestRunRecordRejectsAbsolutePathOutsideTestDir(t *testing.T) {
 	})
 }
 
-func TestRunFailsWhenDependenciesMissing(t *testing.T) {
+func TestRunInitFailsWhenDependenciesMissing(t *testing.T) {
 	root := t.TempDir()
-	wantDir := filepath.Join(root, "e2e")
-	if err := os.MkdirAll(wantDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
 	t.Setenv("PATH", "")
 
 	withWorkingDir(t, root, func() {
@@ -162,8 +167,8 @@ func TestRunFailsWhenDependenciesMissing(t *testing.T) {
 		if !strings.Contains(stderr, `required command "script" not found in PATH`) {
 			t.Fatalf("stderr = %q, want missing dependency error", stderr)
 		}
-		if _, err := os.Stat(filepath.Join(wantDir, "suite", "spec", "in")); !os.IsNotExist(err) {
-			t.Fatalf("Stat() error = %v, want not exists", err)
+		if _, err := os.Stat(filepath.Join(root, "miro.toml")); !os.IsNotExist(err) {
+			t.Fatalf("Stat(%q) error = %v, want not exists", filepath.Join(root, "miro.toml"), err)
 		}
 	})
 }
@@ -174,6 +179,7 @@ func TestRunRecordFailsWhenDependencyMissing(t *testing.T) {
 	if err := os.MkdirAll(wantDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
+	writeFile(t, filepath.Join(root, "miro.toml"), "test_dir = \"e2e\"\n")
 
 	for _, tc := range []struct {
 		name    string
@@ -207,6 +213,27 @@ func TestRunRecordFailsWhenDependencyMissing(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestRunRecordMissingConfigFails(t *testing.T) {
+	addFakeRecordDependencies(t, "script", "bwrap", "bash")
+
+	root := t.TempDir()
+
+	withWorkingDir(t, root, func() {
+		stdout, stderr := captureOutput(t, func() {
+			if got := Run([]string{"record", "suite/spec"}); got != 1 {
+				t.Fatalf("Run() code = %d, want %d", got, 1)
+			}
+		})
+
+		if stdout != "" {
+			t.Fatalf("stdout = %q, want empty", stdout)
+		}
+		if !strings.Contains(stderr, "failed to resolve test directory") || !strings.Contains(stderr, "miro.toml") {
+			t.Fatalf("stderr = %q, want missing config error", stderr)
+		}
+	})
 }
 
 func TestRunRecordMissingPath(t *testing.T) {
@@ -311,6 +338,24 @@ func captureOutput(t *testing.T, fn func()) (string, string) {
 
 func prefixed(msg string) string {
 	return output.Format(msg)
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+}
+
+func mustReadFile(t *testing.T, path string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", path, err)
+	}
+	return string(data)
 }
 
 func withWorkingDir(t *testing.T, dir string, fn func()) {
