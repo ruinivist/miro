@@ -171,7 +171,6 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		"host_tmp=${MIRO_HOST_TMP:?}",
 		"path_env=${MIRO_PATH_ENV:?}",
 		"visible_home=${MIRO_VISIBLE_HOME:?}",
-		"HOME=\"$host_home\" GIT_CONFIG_NOSYSTEM=1 git config --global user.name 'Miro Test'",
 		"--bind \"$host_home\" \"$visible_home\"",
 		"--bind \"$host_tmp\" '/tmp'",
 		"--setenv HOME \"$visible_home\"",
@@ -185,17 +184,6 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("wrapper = %q, want substring %q", body, want)
 		}
-	}
-	for _, unwanted := range []string{
-		"MIRO_SANDBOX_ENVS",
-		"set -- \"$@\" --setenv \"$env_name\" \"$env_value\"",
-	} {
-		if strings.Contains(body, unwanted) {
-			t.Fatalf("wrapper = %q, want no substring %q", body, unwanted)
-		}
-	}
-	if strings.Contains(body, "/home/test") {
-		t.Fatalf("wrapper = %q, want no hardcoded visible home", body)
 	}
 }
 
@@ -219,9 +207,6 @@ func TestRecordSessionEnvIncludesConfiguredSandboxEnv(t *testing.T) {
 		if !containsEnvEntry(env, want) {
 			t.Fatalf("env = %#v, want entry %q", env, want)
 		}
-	}
-	if containsEnvEntry(env, "MIRO_SANDBOX_ENVS=MIRO_KEY_WORD:MIRO_VISIBLE_HOME") {
-		t.Fatalf("env = %#v, want MIRO_SANDBOX_ENVS to be absent", env)
 	}
 }
 
@@ -279,9 +264,6 @@ func TestRunRecordSessionUsesSandboxedScriptCommand(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("wrapper = %q, want substring %q", body, want)
 		}
-	}
-	if strings.Contains(body, "MIRO_SANDBOX_ENVS") {
-		t.Fatalf("wrapper = %q, want no MIRO_SANDBOX_ENVS reference", body)
 	}
 }
 

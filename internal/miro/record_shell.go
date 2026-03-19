@@ -1,7 +1,6 @@
 package miro
 
 import (
-	"bytes"
 	"embed"
 	"errors"
 	"fmt"
@@ -9,17 +8,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/template"
 )
 
 const recordShellName = "shell.sh"
 
 //go:embed record_shell.sh.tmpl
 var recordShellTemplateFS embed.FS
-
-var recordShellTemplate = template.Must(
-	template.New("record_shell.sh.tmpl").ParseFS(recordShellTemplateFS, "record_shell.sh.tmpl"),
-)
 
 func recordShellPath(testDir string) string {
 	return filepath.Join(testDir, recordShellName)
@@ -69,16 +63,12 @@ func resolveRecordShell(testDir string) (string, error) {
 }
 
 func buildRecordShellScript() string {
-	var body bytes.Buffer
-	if err := recordShellTemplate.Execute(&body, struct {
-		GitDate string
-	}{
-		GitDate: shQuote(recordGitDate),
-	}); err != nil {
-		panic(fmt.Sprintf("render record shell template: %v", err))
+	body, err := recordShellTemplateFS.ReadFile("record_shell.sh.tmpl")
+	if err != nil {
+		panic(fmt.Sprintf("read record shell template: %v", err))
 	}
 
-	return body.String()
+	return string(body)
 }
 
 func recordSessionEnv(sandbox recordSandbox, sandboxConfig map[string]string) []string {
@@ -106,8 +96,4 @@ func sortedSandboxKeys(sandboxConfig map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-func shQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }

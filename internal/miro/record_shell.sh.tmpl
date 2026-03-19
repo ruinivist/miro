@@ -9,13 +9,6 @@ host_tmp=${MIRO_HOST_TMP:?}
 path_env=${MIRO_PATH_ENV:?}
 visible_home=${MIRO_VISIBLE_HOME:?}
 
-if command -v git >/dev/null 2>&1; then
-  HOME="$host_home" GIT_CONFIG_NOSYSTEM=1 git config --global user.name 'Miro Test' >/dev/null 2>&1 || :
-  HOME="$host_home" GIT_CONFIG_NOSYSTEM=1 git config --global user.email 'miro-test@example.com' >/dev/null 2>&1 || :
-  HOME="$host_home" GIT_CONFIG_NOSYSTEM=1 git config --global init.defaultBranch main >/dev/null 2>&1 || :
-  HOME="$host_home" GIT_CONFIG_NOSYSTEM=1 git config --global advice.defaultBranchName false >/dev/null 2>&1 || :
-fi
-
 set -- \
   --ro-bind / / \
   --tmpfs /home \
@@ -25,10 +18,6 @@ set -- \
   --proc /proc \
   --unshare-pid \
   --die-with-parent \
-  --setenv GIT_AUTHOR_DATE {{ .GitDate }} \
-  --setenv GIT_COMMITTER_DATE {{ .GitDate }} \
-  --setenv GIT_CONFIG_NOSYSTEM '1' \
-  --setenv GIT_PAGER 'cat' \
   --setenv HISTFILE '/dev/null' \
   --setenv HOME "$visible_home" \
   --setenv LANG 'C' \

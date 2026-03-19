@@ -11,10 +11,6 @@ import (
 	"miro/internal/output"
 )
 
-const (
-	recordGitDate = "2024-01-01T00:00:00Z"
-)
-
 type recordIO struct {
 	in  io.Reader
 	out io.Writer
