@@ -19,7 +19,7 @@ exec bwrap \
   --ro-bind / / \
   --tmpfs /home \
   --bind "$host_home" {{ .VisibleHome }} \
-  --bind "$host_tmp" {{ .VisibleTmp }} \
+  --bind "$host_tmp" '/tmp' \
   --dev /dev \
   --proc /proc \
   --unshare-pid \
@@ -36,7 +36,7 @@ exec bwrap \
   --setenv PATH "$path_env" \
   --setenv PS1 '$ ' \
   --setenv TERM 'xterm-256color' \
-  --setenv TMPDIR {{ .VisibleTmp }} \
+  --setenv TMPDIR '/tmp' \
   --setenv TZ 'UTC' \
   --chdir {{ .VisibleHome }} \
   bash --noprofile --norc -i

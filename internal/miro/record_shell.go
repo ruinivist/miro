@@ -60,11 +60,9 @@ func buildRecordShellScript() string {
 	var body bytes.Buffer
 	if err := recordShellTemplate.Execute(&body, struct {
 		VisibleHome string
-		VisibleTmp  string
 		GitDate     string
 	}{
 		VisibleHome: shQuote(recordVisibleHome),
-		VisibleTmp:  shQuote(recordVisibleTmp),
 		GitDate:     shQuote(recordGitDate),
 	}); err != nil {
 		panic(fmt.Sprintf("render record shell template: %v", err))

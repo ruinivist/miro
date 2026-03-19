@@ -172,7 +172,7 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		"path_env=${MIRO_RECORD_PATH_ENV:?}",
 		"HOME=\"$host_home\" GIT_CONFIG_NOSYSTEM=1 git config --global user.name 'Miro Test'",
 		"--bind \"$host_home\" " + shQuote(recordVisibleHome),
-		"--bind \"$host_tmp\" " + shQuote(recordVisibleTmp),
+		"--bind \"$host_tmp\" '/tmp'",
 		"--setenv HOME " + shQuote(recordVisibleHome),
 		"--setenv PATH \"$path_env\"",
 		"--setenv PS1 '$ '",
@@ -234,7 +234,7 @@ func TestRunRecordSessionUsesSandboxedScriptCommand(t *testing.T) {
 		"--ro-bind / /",
 		"--tmpfs /home",
 		"--setenv HOME " + shQuote(recordVisibleHome),
-		"--setenv TMPDIR " + shQuote(recordVisibleTmp),
+		"--setenv TMPDIR '/tmp'",
 		"bash --noprofile --norc -i",
 	} {
 		if !strings.Contains(body, want) {

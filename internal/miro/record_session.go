@@ -13,7 +13,6 @@ import (
 
 const (
 	recordVisibleHome = "/home/test"
-	recordVisibleTmp  = "/tmp"
 	recordGitDate     = "2024-01-01T00:00:00Z"
 )
 
