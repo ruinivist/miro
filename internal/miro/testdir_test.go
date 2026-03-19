@@ -44,7 +44,7 @@ func TestInitUsesGitRoot(t *testing.T) {
 	assertRecordShell(t, filepath.Join(root, "e2e", recordShellName))
 }
 
-func TestInitLeavesExistingValidConfigUntouched(t *testing.T) {
+func TestInitLeavesExistingValidConfigUntouchedAndRefreshesShell(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "miro.toml"), validConfigContent("custom/suite"))
 	writeFile(t, filepath.Join(root, "custom", "suite", recordShellName), "outdated\n")
@@ -60,8 +60,8 @@ func TestInitLeavesExistingValidConfigUntouched(t *testing.T) {
 	if got != validConfigContent("custom/suite") {
 		t.Fatalf("config = %q, want %q", got, validConfigContent("custom/suite"))
 	}
-	if got := readFile(t, filepath.Join(root, "custom", "suite", recordShellName)); got != "outdated\n" {
-		t.Fatalf("shell = %q, want existing shell to stay untouched", got)
+	if got := readFile(t, filepath.Join(root, "custom", "suite", recordShellName)); got != buildRecordShellScript() {
+		t.Fatalf("shell = %q, want refreshed recorder shell", got)
 	}
 }
 

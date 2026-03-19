@@ -11,7 +11,7 @@ import (
 
 const defaultTestDir = "e2e"
 
-// Init creates the default config when missing and leaves valid config untouched.
+// Init creates the default config when missing and refreshes the recorder shell.
 func Init() error {
 	root, err := currentProjectRoot()
 	if err != nil {

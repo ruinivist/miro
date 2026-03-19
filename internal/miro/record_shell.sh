@@ -7,6 +7,10 @@ host_tmp=${MIRO_HOST_TMP:?}
 path_env=${MIRO_PATH_ENV:?}
 visible_home=${MIRO_VISIBLE_HOME:?}
 
+if [ "${MIRO_COMPARE_MARKER:-0}" = "1" ]; then
+  printf '__MIRO_E2E_BEGIN__\n'
+fi
+
 set -- \
   --ro-bind / / \
   --tmpfs /home \

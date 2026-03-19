@@ -171,6 +171,8 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		"host_tmp=${MIRO_HOST_TMP:?}",
 		"path_env=${MIRO_PATH_ENV:?}",
 		"visible_home=${MIRO_VISIBLE_HOME:?}",
+		`if [ "${MIRO_COMPARE_MARKER:-0}" = "1" ]; then`,
+		"printf '__MIRO_E2E_BEGIN__\\n'",
 		"--bind \"$host_home\" \"$visible_home\"",
 		"--bind \"$host_tmp\" '/tmp'",
 		"--setenv HOME \"$visible_home\"",
@@ -203,6 +205,30 @@ func TestRecordSessionEnvIncludesConfiguredSandboxEnv(t *testing.T) {
 		"MIRO_PATH_ENV=/tmp/bin",
 		"MIRO_KEY_WORD=value",
 		"MIRO_VISIBLE_HOME=/sandbox/home",
+	} {
+		if !containsEnvEntry(env, want) {
+			t.Fatalf("env = %#v, want entry %q", env, want)
+		}
+	}
+}
+
+func TestRecordSessionEnvWithExtraIncludesAdditionalEntries(t *testing.T) {
+	env := recordSessionEnvWithExtra(recordSandbox{
+		hostHome: "/tmp/host-home",
+		hostTmp:  "/tmp/host-tmp",
+		pathEnv:  "/tmp/bin",
+	}, map[string]string{
+		"visible_home": "/sandbox/home",
+	}, map[string]string{
+		compareMarkerEnvName: compareMarkerEnabledValue,
+	})
+
+	for _, want := range []string{
+		"MIRO_HOST_HOME=/tmp/host-home",
+		"MIRO_HOST_TMP=/tmp/host-tmp",
+		"MIRO_PATH_ENV=/tmp/bin",
+		"MIRO_VISIBLE_HOME=/sandbox/home",
+		"MIRO_COMPARE_MARKER=1",
 	} {
 		if !containsEnvEntry(env, want) {
 			t.Fatalf("env = %#v, want entry %q", env, want)
@@ -255,6 +281,8 @@ func TestRunRecordSessionUsesSandboxedScriptCommand(t *testing.T) {
 	for _, want := range []string{
 		"host_home=${MIRO_HOST_HOME:?}",
 		"visible_home=${MIRO_VISIBLE_HOME:?}",
+		`if [ "${MIRO_COMPARE_MARKER:-0}" = "1" ]; then`,
+		"printf '__MIRO_E2E_BEGIN__\\n'",
 		"--ro-bind / /",
 		"--tmpfs /home",
 		"--setenv HOME \"$visible_home\"",
@@ -451,7 +479,101 @@ func addFakeRecordDependencies(t *testing.T, names ...string) {
 		path := filepath.Join(binDir, name)
 		body := "#!/bin/sh\nexit 0\n"
 		if name == "script" {
-			body = "#!/bin/sh\nif [ -n \"${FAKE_SCRIPT_ARGS_FILE:-}\" ]; then\n  : > \"$FAKE_SCRIPT_ARGS_FILE\"\n  for arg in \"$@\"; do\n    printf '%s\\n' \"$arg\" >> \"$FAKE_SCRIPT_ARGS_FILE\"\n  done\nfi\nin=''\nout=''\ncmd=''\nwhile [ \"$#\" -gt 0 ]; do\n  case \"$1\" in\n    -I)\n      in=\"$2\"\n      shift 2\n      ;;\n    -O)\n      out=\"$2\"\n      shift 2\n      ;;\n    -c)\n      cmd=\"$2\"\n      shift 2\n      ;;\n    *)\n      shift\n      ;;\n  esac\ndone\nif [ -n \"${FAKE_SCRIPT_COMMAND_BODY_FILE:-}\" ] && [ -n \"$cmd\" ]; then\n  : > \"$FAKE_SCRIPT_COMMAND_BODY_FILE\"\n  while IFS= read -r line || [ -n \"$line\" ]; do\n    printf '%s\\n' \"$line\" >> \"$FAKE_SCRIPT_COMMAND_BODY_FILE\"\n  done < \"$cmd\"\nfi\nif [ -n \"${FAKE_SCRIPT_LOG_IN+x}\" ]; then\n  printf '%s' \"$FAKE_SCRIPT_LOG_IN\" > \"$in\"\nelse\n  printf '%s' 'fake recorded input\n' > \"$in\"\nfi\nif [ -n \"${FAKE_SCRIPT_LOG_OUT+x}\" ]; then\n  printf '%s' \"$FAKE_SCRIPT_LOG_OUT\" > \"$out\"\nelse\n  printf '%s' 'Script started on 2026-03-18 11:13:38+00:00 [TERM=\"xterm-256color\"]\nfake recorded output\nScript done on 2026-03-18 11:13:44+00:00 [COMMAND_EXIT_CODE=\"0\"]\n' > \"$out\"\nfi\nexit 0\n"
+			body = `#!/bin/sh
+if [ -n "${FAKE_SCRIPT_ARGS_FILE:-}" ]; then
+  : > "$FAKE_SCRIPT_ARGS_FILE"
+  for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$FAKE_SCRIPT_ARGS_FILE"
+  done
+fi
+in=''
+out=''
+cmd=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -I)
+      in="$2"
+      shift 2
+      ;;
+    -O)
+      out="$2"
+      shift 2
+      ;;
+    -c)
+      cmd="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [ -n "${FAKE_SCRIPT_COMMAND_BODY_FILE:-}" ] && [ -n "$cmd" ]; then
+  : > "$FAKE_SCRIPT_COMMAND_BODY_FILE"
+  while IFS= read -r line || [ -n "$line" ]; do
+    printf '%s\n' "$line" >> "$FAKE_SCRIPT_COMMAND_BODY_FILE"
+  done < "$cmd"
+fi
+command_has_compare_marker=0
+if [ -n "$cmd" ] && /bin/grep -q '__MIRO_E2E_BEGIN__' "$cmd" 2>/dev/null; then
+  command_has_compare_marker=1
+fi
+stdin_file=''
+if [ "${FAKE_SCRIPT_ECHO_STDIN:-}" = "1" ] || [ -n "${FAKE_SCRIPT_CAPTURE_STDIN_FILE:-}" ]; then
+  stdin_file="${TMPDIR:-/tmp}/miro-fake-script-stdin-$$"
+  /bin/cat > "$stdin_file"
+fi
+if [ -n "${FAKE_SCRIPT_CAPTURE_STDIN_FILE:-}" ] && [ -n "$stdin_file" ]; then
+  /bin/cp "$stdin_file" "$FAKE_SCRIPT_CAPTURE_STDIN_FILE"
+fi
+if [ -n "$in" ] && [ -n "${FAKE_SCRIPT_LOG_IN+x}" ]; then
+  printf '%s' "$FAKE_SCRIPT_LOG_IN" > "$in"
+elif [ -n "$in" ] && [ -n "$stdin_file" ]; then
+  /bin/cp "$stdin_file" "$in"
+elif [ -n "$in" ]; then
+  printf '%s' 'fake recorded input
+' > "$in"
+fi
+if [ -n "${FAKE_SCRIPT_STREAM_OUT+x}" ]; then
+  printf '%s' "$FAKE_SCRIPT_STREAM_OUT"
+elif [ "${FAKE_SCRIPT_ECHO_STDIN:-}" = "1" ] && [ -n "$stdin_file" ]; then
+  /bin/cat "$stdin_file"
+  if [ "${MIRO_COMPARE_MARKER:-0}" = "1" ] && [ "$command_has_compare_marker" = "1" ]; then
+    printf '%s\n' '__MIRO_E2E_BEGIN__'
+    /bin/cat "$stdin_file"
+  fi
+fi
+if [ -n "${FAKE_SCRIPT_STREAM_ERR+x}" ]; then
+  printf '%s' "$FAKE_SCRIPT_STREAM_ERR" >&2
+fi
+if [ -n "$out" ] && [ -n "${FAKE_SCRIPT_LOG_OUT+x}" ]; then
+  printf '%s' "$FAKE_SCRIPT_LOG_OUT" > "$out"
+elif [ -n "$out" ] && [ "${FAKE_SCRIPT_ECHO_STDIN:-}" = "1" ] && [ -n "$stdin_file" ]; then
+  {
+    printf '%s' 'Script started on 2026-03-18 11:13:38+00:00 [TERM="xterm-256color"]
+'
+    /bin/cat "$stdin_file"
+    if [ "${MIRO_COMPARE_MARKER:-0}" = "1" ] && [ "$command_has_compare_marker" = "1" ]; then
+      printf '%s\n' '__MIRO_E2E_BEGIN__'
+      /bin/cat "$stdin_file"
+    fi
+    printf '%s' 'Script done on 2026-03-18 11:13:44+00:00 [COMMAND_EXIT_CODE="0"]
+'
+  } > "$out"
+elif [ -n "$out" ]; then
+  printf '%s' 'Script started on 2026-03-18 11:13:38+00:00 [TERM="xterm-256color"]
+fake recorded output
+Script done on 2026-03-18 11:13:44+00:00 [COMMAND_EXIT_CODE="0"]
+' > "$out"
+fi
+if [ -n "$stdin_file" ]; then
+  /bin/rm -f "$stdin_file"
+fi
+if [ -n "${FAKE_SCRIPT_EXIT_CODE:-}" ]; then
+  exit "$FAKE_SCRIPT_EXIT_CODE"
+fi
+exit 0
+`
 		}
 		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 			t.Fatalf("WriteFile(%q) error = %v", path, err)

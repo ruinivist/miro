@@ -23,7 +23,7 @@ func TestRunShowsHelpWhenNoArgs(t *testing.T) {
 	if !strings.Contains(stdout, "A lean CLI E2E testing framework.") {
 		t.Fatalf("stdout = %q, want root help", stdout)
 	}
-	if !strings.Contains(stdout, "init") || !strings.Contains(stdout, "record") {
+	if !strings.Contains(stdout, "init") || !strings.Contains(stdout, "record") || !strings.Contains(stdout, "test") {
 		t.Fatalf("stdout = %q, want listed subcommands", stdout)
 	}
 	if stderr != "" {
@@ -263,6 +263,194 @@ func TestRunRecordMissingConfigFails(t *testing.T) {
 	})
 }
 
+func TestRunTest(t *testing.T) {
+	addFakeRecordDependencies(t, "script", "bwrap", "bash")
+	t.Setenv("FAKE_SCRIPT_ECHO_STDIN", "1")
+
+	root := t.TempDir()
+	writeScenarioFixtures(t, filepath.Join(root, "e2e", "a"), "echo one\n", "echo one\n")
+	writeScenarioFixtures(t, filepath.Join(root, "e2e", "nested", "b"), "echo two\n", "echo two\n")
+
+	withWorkingDir(t, root, func() {
+		initStdout, initStderr := captureOutput(t, func() {
+			if got := Run([]string{"init"}); got != 0 {
+				t.Fatalf("Run() code = %d, want %d", got, 0)
+			}
+		})
+		if initStdout != prefixed("Done initialising...\n") {
+			t.Fatalf("stdout = %q, want %q", initStdout, prefixed("Done initialising...\n"))
+		}
+		if initStderr != "" {
+			t.Fatalf("stderr = %q, want empty", initStderr)
+		}
+
+		stdout, stderr := captureOutput(t, func() {
+			if got := Run([]string{"test"}); got != 0 {
+				t.Fatalf("Run() code = %d, want %d", got, 0)
+			}
+		})
+
+		for _, want := range []string{
+			"RUN a",
+			"PASS a",
+			"RUN nested/b",
+			"PASS nested/b",
+			"Summary: total=2 passed=2 failed=0",
+			"echo one\n",
+			"echo two\n",
+		} {
+			if !strings.Contains(stdout, want) {
+				t.Fatalf("stdout = %q, want substring %q", stdout, want)
+			}
+		}
+		if stderr != "" {
+			t.Fatalf("stderr = %q, want empty", stderr)
+		}
+	})
+}
+
+func TestRunTestReturnsOneWhenScenarioMismatches(t *testing.T) {
+	addFakeRecordDependencies(t, "script", "bwrap", "bash")
+	t.Setenv("FAKE_SCRIPT_ECHO_STDIN", "1")
+
+	root := t.TempDir()
+	writeScenarioFixtures(t, filepath.Join(root, "e2e", "a"), "echo one\n", "echo one\n")
+	writeScenarioFixtures(t, filepath.Join(root, "e2e", "b"), "echo two\n", "different output\n")
+
+	withWorkingDir(t, root, func() {
+		initStdout, initStderr := captureOutput(t, func() {
+			if got := Run([]string{"init"}); got != 0 {
+				t.Fatalf("Run() code = %d, want %d", got, 0)
+			}
+		})
+		if initStdout != prefixed("Done initialising...\n") {
+			t.Fatalf("stdout = %q, want %q", initStdout, prefixed("Done initialising...\n"))
+		}
+		if initStderr != "" {
+			t.Fatalf("stderr = %q, want empty", initStderr)
+		}
+
+		stdout, stderr := captureOutput(t, func() {
+			if got := Run([]string{"test"}); got != 1 {
+				t.Fatalf("Run() code = %d, want %d", got, 1)
+			}
+		})
+
+		for _, want := range []string{
+			"RUN a",
+			"PASS a",
+			"RUN b",
+			"FAIL b: output differed",
+			"Summary: total=2 passed=1 failed=1",
+		} {
+			if !strings.Contains(stdout, want) {
+				t.Fatalf("stdout = %q, want substring %q", stdout, want)
+			}
+		}
+		if !strings.Contains(stderr, "1 scenario(s) failed") {
+			t.Fatalf("stderr = %q, want suite failure", stderr)
+		}
+	})
+}
+
+func TestRunTestMissingConfigFails(t *testing.T) {
+	addFakeRecordDependencies(t, "script", "bwrap", "bash")
+
+	root := t.TempDir()
+
+	withWorkingDir(t, root, func() {
+		stdout, stderr := captureOutput(t, func() {
+			if got := Run([]string{"test"}); got != 1 {
+				t.Fatalf("Run() code = %d, want %d", got, 1)
+			}
+		})
+
+		if stdout != "" {
+			t.Fatalf("stdout = %q, want empty", stdout)
+		}
+		if !strings.Contains(stderr, "failed to resolve test directory") || !strings.Contains(stderr, "miro.toml") {
+			t.Fatalf("stderr = %q, want missing config error", stderr)
+		}
+	})
+}
+
+func TestRunTestFailsWhenRecorderShellMissing(t *testing.T) {
+	addFakeRecordDependencies(t, "script", "bwrap", "bash")
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "miro.toml"), validConfigContent("e2e"))
+
+	withWorkingDir(t, root, func() {
+		stdout, stderr := captureOutput(t, func() {
+			if got := Run([]string{"test"}); got != 1 {
+				t.Fatalf("Run() code = %d, want %d", got, 1)
+			}
+		})
+
+		if stdout != "" {
+			t.Fatalf("stdout = %q, want empty", stdout)
+		}
+		if !strings.Contains(stderr, "rerun `miro init`") {
+			t.Fatalf("stderr = %q, want rerun init hint", stderr)
+		}
+	})
+}
+
+func TestRunTestFailsWhenFixtureMalformed(t *testing.T) {
+	addFakeRecordDependencies(t, "script", "bwrap", "bash")
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "miro.toml"), validConfigContent("e2e"))
+	writeFile(t, filepath.Join(root, "e2e", "shell.sh"), "#!/bin/sh\n")
+	writeFile(t, filepath.Join(root, "e2e", "broken", "in"), "echo broken\n")
+
+	withWorkingDir(t, root, func() {
+		stdout, stderr := captureOutput(t, func() {
+			if got := Run([]string{"test"}); got != 1 {
+				t.Fatalf("Run() code = %d, want %d", got, 1)
+			}
+		})
+
+		if stdout != "" {
+			t.Fatalf("stdout = %q, want empty", stdout)
+		}
+		if !strings.Contains(stderr, `malformed scenario "broken": missing out fixture`) {
+			t.Fatalf("stderr = %q, want malformed fixture error", stderr)
+		}
+	})
+}
+
+func TestRunTestFailsWhenCompareMarkerMissing(t *testing.T) {
+	addFakeRecordDependencies(t, "script", "bwrap", "bash")
+	t.Setenv("FAKE_SCRIPT_ECHO_STDIN", "1")
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "miro.toml"), validConfigContent("e2e"))
+	writeFile(t, filepath.Join(root, "e2e", "shell.sh"), "#!/bin/sh\n")
+	writeScenarioFixtures(t, filepath.Join(root, "e2e", "some"), "echo one\n", "echo one\n")
+
+	withWorkingDir(t, root, func() {
+		stdout, stderr := captureOutput(t, func() {
+			if got := Run([]string{"test"}); got != 1 {
+				t.Fatalf("Run() code = %d, want %d", got, 1)
+			}
+		})
+
+		for _, want := range []string{
+			"RUN some",
+			"FAIL some: missing compare marker",
+			"Summary: total=1 passed=0 failed=1",
+		} {
+			if !strings.Contains(stdout, want) {
+				t.Fatalf("stdout = %q, want substring %q", stdout, want)
+			}
+		}
+		if !strings.Contains(stderr, "1 scenario(s) failed") {
+			t.Fatalf("stderr = %q, want suite failure", stderr)
+		}
+	})
+}
+
 func TestRunRecordMissingPath(t *testing.T) {
 	addFakeRecordDependencies(t, "script", "bwrap", "bash")
 
@@ -370,9 +558,19 @@ func prefixed(msg string) string {
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(path), err)
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", path, err)
 	}
+}
+
+func writeScenarioFixtures(t *testing.T, dir, in, out string) {
+	t.Helper()
+
+	writeFile(t, filepath.Join(dir, "in"), in)
+	writeFile(t, filepath.Join(dir, "out"), out)
 }
 
 func mustReadFile(t *testing.T, path string) string {
@@ -412,7 +610,101 @@ func addFakeRecordDependencies(t *testing.T, names ...string) {
 		path := filepath.Join(binDir, name)
 		body := "#!/bin/sh\nexit 0\n"
 		if name == "script" {
-			body = "#!/bin/sh\nif [ -n \"${FAKE_SCRIPT_ARGS_FILE:-}\" ]; then\n  : > \"$FAKE_SCRIPT_ARGS_FILE\"\n  for arg in \"$@\"; do\n    printf '%s\\n' \"$arg\" >> \"$FAKE_SCRIPT_ARGS_FILE\"\n  done\nfi\nin=''\nout=''\ncmd=''\nwhile [ \"$#\" -gt 0 ]; do\n  case \"$1\" in\n    -I)\n      in=\"$2\"\n      shift 2\n      ;;\n    -O)\n      out=\"$2\"\n      shift 2\n      ;;\n    -c)\n      cmd=\"$2\"\n      shift 2\n      ;;\n    *)\n      shift\n      ;;\n  esac\ndone\nif [ -n \"${FAKE_SCRIPT_COMMAND_BODY_FILE:-}\" ] && [ -n \"$cmd\" ]; then\n  : > \"$FAKE_SCRIPT_COMMAND_BODY_FILE\"\n  while IFS= read -r line || [ -n \"$line\" ]; do\n    printf '%s\\n' \"$line\" >> \"$FAKE_SCRIPT_COMMAND_BODY_FILE\"\n  done < \"$cmd\"\nfi\nprintf '%s' 'fake recorded input\n' > \"$in\"\nprintf '%s' 'Script started on 2026-03-18 11:13:38+00:00 [TERM=\"xterm-256color\"]\nfake recorded output\nScript done on 2026-03-18 11:13:44+00:00 [COMMAND_EXIT_CODE=\"0\"]\n' > \"$out\"\nexit 0\n"
+			body = `#!/bin/sh
+if [ -n "${FAKE_SCRIPT_ARGS_FILE:-}" ]; then
+  : > "$FAKE_SCRIPT_ARGS_FILE"
+  for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$FAKE_SCRIPT_ARGS_FILE"
+  done
+fi
+in=''
+out=''
+cmd=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -I)
+      in="$2"
+      shift 2
+      ;;
+    -O)
+      out="$2"
+      shift 2
+      ;;
+    -c)
+      cmd="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [ -n "${FAKE_SCRIPT_COMMAND_BODY_FILE:-}" ] && [ -n "$cmd" ]; then
+  : > "$FAKE_SCRIPT_COMMAND_BODY_FILE"
+  while IFS= read -r line || [ -n "$line" ]; do
+    printf '%s\n' "$line" >> "$FAKE_SCRIPT_COMMAND_BODY_FILE"
+  done < "$cmd"
+fi
+command_has_compare_marker=0
+if [ -n "$cmd" ] && /bin/grep -q '__MIRO_E2E_BEGIN__' "$cmd" 2>/dev/null; then
+  command_has_compare_marker=1
+fi
+stdin_file=''
+if [ "${FAKE_SCRIPT_ECHO_STDIN:-}" = "1" ] || [ -n "${FAKE_SCRIPT_CAPTURE_STDIN_FILE:-}" ]; then
+  stdin_file="${TMPDIR:-/tmp}/miro-fake-script-stdin-$$"
+  /bin/cat > "$stdin_file"
+fi
+if [ -n "${FAKE_SCRIPT_CAPTURE_STDIN_FILE:-}" ] && [ -n "$stdin_file" ]; then
+  /bin/cp "$stdin_file" "$FAKE_SCRIPT_CAPTURE_STDIN_FILE"
+fi
+if [ -n "$in" ] && [ -n "${FAKE_SCRIPT_LOG_IN+x}" ]; then
+  printf '%s' "$FAKE_SCRIPT_LOG_IN" > "$in"
+elif [ -n "$in" ] && [ -n "$stdin_file" ]; then
+  /bin/cp "$stdin_file" "$in"
+elif [ -n "$in" ]; then
+  printf '%s' 'fake recorded input
+' > "$in"
+fi
+if [ -n "${FAKE_SCRIPT_STREAM_OUT+x}" ]; then
+  printf '%s' "$FAKE_SCRIPT_STREAM_OUT"
+elif [ "${FAKE_SCRIPT_ECHO_STDIN:-}" = "1" ] && [ -n "$stdin_file" ]; then
+  /bin/cat "$stdin_file"
+  if [ "${MIRO_COMPARE_MARKER:-0}" = "1" ] && [ "$command_has_compare_marker" = "1" ]; then
+    printf '%s\n' '__MIRO_E2E_BEGIN__'
+    /bin/cat "$stdin_file"
+  fi
+fi
+if [ -n "${FAKE_SCRIPT_STREAM_ERR+x}" ]; then
+  printf '%s' "$FAKE_SCRIPT_STREAM_ERR" >&2
+fi
+if [ -n "$out" ] && [ -n "${FAKE_SCRIPT_LOG_OUT+x}" ]; then
+  printf '%s' "$FAKE_SCRIPT_LOG_OUT" > "$out"
+elif [ -n "$out" ] && [ "${FAKE_SCRIPT_ECHO_STDIN:-}" = "1" ] && [ -n "$stdin_file" ]; then
+  {
+    printf '%s' 'Script started on 2026-03-18 11:13:38+00:00 [TERM="xterm-256color"]
+'
+    /bin/cat "$stdin_file"
+    if [ "${MIRO_COMPARE_MARKER:-0}" = "1" ] && [ "$command_has_compare_marker" = "1" ]; then
+      printf '%s\n' '__MIRO_E2E_BEGIN__'
+      /bin/cat "$stdin_file"
+    fi
+    printf '%s' 'Script done on 2026-03-18 11:13:44+00:00 [COMMAND_EXIT_CODE="0"]
+'
+  } > "$out"
+elif [ -n "$out" ]; then
+  printf '%s' 'Script started on 2026-03-18 11:13:38+00:00 [TERM="xterm-256color"]
+fake recorded output
+Script done on 2026-03-18 11:13:44+00:00 [COMMAND_EXIT_CODE="0"]
+' > "$out"
+fi
+if [ -n "$stdin_file" ]; then
+  /bin/rm -f "$stdin_file"
+fi
+if [ -n "${FAKE_SCRIPT_EXIT_CODE:-}" ]; then
+  exit "$FAKE_SCRIPT_EXIT_CODE"
+fi
+exit 0
+`
 		}
 		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 			t.Fatalf("WriteFile(%q) error = %v", path, err)

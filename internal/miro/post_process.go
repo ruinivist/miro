@@ -11,6 +11,8 @@ var (
 	scriptDonePrefix  = []byte("Script done on ")
 )
 
+const eofByte = byte(0x04)
+
 func loadRecordedInput(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -18,10 +20,13 @@ func loadRecordedInput(path string) ([]byte, error) {
 	}
 
 	if hasScriptWrapper(data) {
-		return stripScriptWrapper(data)
+		data, err = stripScriptWrapper(data)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return data, nil
+	return trimTrailingNewlineAfterEOF(data), nil
 }
 
 func loadRecordedOutput(path string) ([]byte, error) {
@@ -101,4 +106,12 @@ func findScriptFooter(data []byte) (int, footerMatchState) {
 	}
 
 	return candidate, footerFound
+}
+
+func trimTrailingNewlineAfterEOF(data []byte) []byte {
+	if len(data) >= 2 && data[len(data)-2] == eofByte && data[len(data)-1] == '\n' {
+		return data[:len(data)-1]
+	}
+
+	return data
 }
