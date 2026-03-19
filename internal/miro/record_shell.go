@@ -60,12 +60,10 @@ func buildRecordShellScript() string {
 	var body bytes.Buffer
 	if err := recordShellTemplate.Execute(&body, struct {
 		VisibleHome string
-		VisibleRepo string
 		VisibleTmp  string
 		GitDate     string
 	}{
 		VisibleHome: shQuote(recordVisibleHome),
-		VisibleRepo: shQuote(recordVisibleRepo),
 		VisibleTmp:  shQuote(recordVisibleTmp),
 		GitDate:     shQuote(recordGitDate),
 	}); err != nil {
@@ -80,7 +78,6 @@ func recordSessionEnv(sandbox recordSandbox) []string {
 	env = append(env,
 		"MIRO_RECORD_HOST_HOME="+sandbox.hostHome,
 		"MIRO_RECORD_HOST_TMP="+sandbox.hostTmp,
-		"MIRO_RECORD_PROJECT_ROOT="+sandbox.projectRoot,
 		"MIRO_RECORD_PATH_ENV="+sandbox.pathEnv,
 	)
 

@@ -169,11 +169,9 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 	for _, want := range []string{
 		"host_home=${MIRO_RECORD_HOST_HOME:?}",
 		"host_tmp=${MIRO_RECORD_HOST_TMP:?}",
-		"project_root=${MIRO_RECORD_PROJECT_ROOT:?}",
 		"path_env=${MIRO_RECORD_PATH_ENV:?}",
 		"HOME=\"$host_home\" GIT_CONFIG_NOSYSTEM=1 git config --global user.name 'Miro Test'",
 		"--bind \"$host_home\" " + shQuote(recordVisibleHome),
-		"--ro-bind \"$project_root\" " + shQuote(recordVisibleRepo),
 		"--bind \"$host_tmp\" " + shQuote(recordVisibleTmp),
 		"--setenv HOME " + shQuote(recordVisibleHome),
 		"--setenv PATH \"$path_env\"",
@@ -190,8 +188,7 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 }
 
 func TestRunRecordSessionUsesSandboxedScriptCommand(t *testing.T) {
-	root := t.TempDir()
-	testDir := filepath.Join(root, "e2e")
+	testDir := filepath.Join(t.TempDir(), "e2e")
 	mustWriteRecordShell(t, testDir)
 	addFakeRecordDependencies(t, "script")
 
@@ -200,15 +197,15 @@ func TestRunRecordSessionUsesSandboxedScriptCommand(t *testing.T) {
 	t.Setenv("FAKE_SCRIPT_ARGS_FILE", argsPath)
 	t.Setenv("FAKE_SCRIPT_COMMAND_BODY_FILE", commandBodyPath)
 
-	sandbox, cleanup, err := newRecordSandboxForProjectRoot(root, os.Getenv("PATH"))
+	sandbox, cleanup, err := newRecordSandboxForPathEnv(os.Getenv("PATH"))
 	if err != nil {
-		t.Fatalf("newRecordSandboxForProjectRoot() error = %v", err)
+		t.Fatalf("newRecordSandboxForPathEnv() error = %v", err)
 	}
 	defer cleanup()
 
 	shellPath := recordShellPath(testDir)
 	err = withRecordStreams(t, "", func(rio recordIO) error {
-		return runRecordSession(root, filepath.Join(t.TempDir(), "raw.in"), filepath.Join(t.TempDir(), "raw.out"), shellPath, sandbox, rio)
+		return runRecordSession(t.TempDir(), filepath.Join(t.TempDir(), "raw.in"), filepath.Join(t.TempDir(), "raw.out"), shellPath, sandbox, rio)
 	})
 	if err != nil {
 		t.Fatalf("runRecordSession() error = %v", err)
@@ -236,7 +233,6 @@ func TestRunRecordSessionUsesSandboxedScriptCommand(t *testing.T) {
 		"host_home=${MIRO_RECORD_HOST_HOME:?}",
 		"--ro-bind / /",
 		"--tmpfs /home",
-		"--ro-bind \"$project_root\" " + shQuote(recordVisibleRepo),
 		"--setenv HOME " + shQuote(recordVisibleHome),
 		"--setenv TMPDIR " + shQuote(recordVisibleTmp),
 		"bash --noprofile --norc -i",
@@ -271,7 +267,7 @@ func TestRecordScenarioUsesDeterministicSandbox(t *testing.T) {
 		defer close(writeDone)
 		defer writer.Close()
 
-		if _, err := writer.Write([]byte("pwd\necho \"$HOME\"\ncd repo\npwd\nexit\n")); err != nil {
+		if _, err := writer.Write([]byte("pwd\necho \"$HOME\"\nif [ -e /home/test/repo ]; then echo FOUND; else echo MISSING; fi\npwd\nexit\n")); err != nil {
 			writeDone <- err
 			return
 		}
@@ -304,7 +300,7 @@ func TestRecordScenarioUsesDeterministicSandbox(t *testing.T) {
 	if strings.Contains(recordedIn, "Script started on ") {
 		t.Fatalf("saved in = %q, want stripped script wrapper", recordedIn)
 	}
-	for _, want := range []string{"pwd\n", "echo \"$HOME\"\n", "cd repo\n", "exit\n"} {
+	for _, want := range []string{"pwd\n", "echo \"$HOME\"\n", "if [ -e /home/test/repo ]; then echo FOUND; else echo MISSING; fi\n", "exit\n"} {
 		if !strings.Contains(recordedIn, want) {
 			t.Fatalf("saved in = %q, want substring %q", recordedIn, want)
 		}
@@ -314,10 +310,16 @@ func TestRecordScenarioUsesDeterministicSandbox(t *testing.T) {
 	if strings.Contains(recordedOut, "Script started on ") {
 		t.Fatalf("saved out = %q, want stripped script wrapper", recordedOut)
 	}
-	for _, want := range []string{recordVisibleHome, recordVisibleRepo} {
+	for _, want := range []string{recordVisibleHome} {
 		if !strings.Contains(recordedOut, want) {
 			t.Fatalf("saved out = %q, want substring %q", recordedOut, want)
 		}
+	}
+	if !strings.Contains(recordedOut, "MISSING") {
+		t.Fatalf("saved out = %q, want missing repo confirmation", recordedOut)
+	}
+	if strings.Contains(recordedOut, "\r\nFOUND\r\n") {
+		t.Fatalf("saved out = %q, want repo to stay unavailable", recordedOut)
 	}
 }
 

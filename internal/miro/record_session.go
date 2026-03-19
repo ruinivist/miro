@@ -13,7 +13,6 @@ import (
 
 const (
 	recordVisibleHome = "/home/test"
-	recordVisibleRepo = "/home/test/repo"
 	recordVisibleTmp  = "/tmp"
 	recordGitDate     = "2024-01-01T00:00:00Z"
 )
@@ -88,22 +87,16 @@ func newRecordFiles() (string, string, func(), error) {
 }
 
 type recordSandbox struct {
-	hostHome    string
-	hostTmp     string
-	projectRoot string
-	pathEnv     string
+	hostHome string
+	hostTmp  string
+	pathEnv  string
 }
 
 func newRecordSandbox() (recordSandbox, func(), error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return recordSandbox{}, nil, err
-	}
-
-	return newRecordSandboxForProjectRoot(projectRoot(cwd), os.Getenv("PATH"))
+	return newRecordSandboxForPathEnv(os.Getenv("PATH"))
 }
 
-func newRecordSandboxForProjectRoot(root, pathEnv string) (recordSandbox, func(), error) {
+func newRecordSandboxForPathEnv(pathEnv string) (recordSandbox, func(), error) {
 	dir, err := os.MkdirTemp("", "miro-record-sandbox-")
 	if err != nil {
 		return recordSandbox{}, nil, err
@@ -114,15 +107,13 @@ func newRecordSandboxForProjectRoot(root, pathEnv string) (recordSandbox, func()
 	}
 
 	sandbox := recordSandbox{
-		hostHome:    filepath.Join(dir, "home"),
-		hostTmp:     filepath.Join(dir, "tmp"),
-		projectRoot: root,
-		pathEnv:     pathEnv,
+		hostHome: filepath.Join(dir, "home"),
+		hostTmp:  filepath.Join(dir, "tmp"),
+		pathEnv:  pathEnv,
 	}
 
 	for _, path := range []string{
 		sandbox.hostHome,
-		filepath.Join(sandbox.hostHome, "repo"),
 		sandbox.hostTmp,
 	} {
 		if err := os.MkdirAll(path, 0o755); err != nil {

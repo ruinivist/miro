@@ -1,9 +1,11 @@
 #!/bin/sh
 set -eu
 
+# Host directory mounted as the sandboxed HOME.
 host_home=${MIRO_RECORD_HOST_HOME:?}
+# Host temp directory mounted read-write inside the sandbox.
 host_tmp=${MIRO_RECORD_HOST_TMP:?}
-project_root=${MIRO_RECORD_PROJECT_ROOT:?}
+# PATH value forwarded into the sandbox so required tools stay available.
 path_env=${MIRO_RECORD_PATH_ENV:?}
 
 if command -v git >/dev/null 2>&1; then
@@ -17,7 +19,6 @@ exec bwrap \
   --ro-bind / / \
   --tmpfs /home \
   --bind "$host_home" {{ .VisibleHome }} \
-  --ro-bind "$project_root" {{ .VisibleRepo }} \
   --bind "$host_tmp" {{ .VisibleTmp }} \
   --dev /dev \
   --proc /proc \
