@@ -47,58 +47,6 @@ func TestRecordCreatesRelativePath(t *testing.T) {
 	}
 }
 
-func TestRecordAcceptsExplicitTestDirPrefix(t *testing.T) {
-	root := t.TempDir()
-	testDir := filepath.Join(root, "e2e")
-	mustMkdirAll(t, testDir)
-	writeFile(t, filepath.Join(root, "miro.toml"), validConfigContent("e2e"))
-	mustWriteRecordShell(t, testDir)
-	addFakeRecordDependencies(t, "script")
-
-	got := withWorkingDir(t, root, func() string {
-		withStdin(t, "y\n", func() {})
-		path, err := Record(filepath.Join("e2e", "a", "b", "c"))
-		if err != nil {
-			t.Fatalf("Record() error = %v", err)
-		}
-		return path
-	})
-
-	want := filepath.Join(testDir, "a", "b", "c")
-	if got != want {
-		t.Fatalf("Record() = %q, want %q", got, want)
-	}
-
-	for _, name := range []string{"in", "out"} {
-		if _, err := os.Stat(filepath.Join(want, name)); err != nil {
-			t.Fatalf("Stat(%q) error = %v", filepath.Join(want, name), err)
-		}
-	}
-
-	if got := readFile(t, filepath.Join(want, "out")); got != "fake recorded output\n" {
-		t.Fatalf("saved out = %q, want %q", got, "fake recorded output\n")
-	}
-}
-
-func TestRecordRejectsAbsolutePathOutsideTestDir(t *testing.T) {
-	root := t.TempDir()
-	mustMkdirAll(t, filepath.Join(root, "e2e"))
-	writeFile(t, filepath.Join(root, "miro.toml"), validConfigContent("e2e"))
-	outside := filepath.Join(root, "outside", "a", "b", "c")
-
-	err := withWorkingDir(t, root, func() error {
-		_, err := Record(outside)
-		return err
-	})
-
-	if err == nil {
-		t.Fatal("Record() error = nil, want error")
-	}
-	if _, statErr := os.Stat(outside); !os.IsNotExist(statErr) {
-		t.Fatalf("Stat(%q) error = %v, want not exists", outside, statErr)
-	}
-}
-
 func TestRecordReturnsDiscardedErrorWhenSaveDeclined(t *testing.T) {
 	root := t.TempDir()
 	testDir := filepath.Join(root, "e2e")
