@@ -9,25 +9,43 @@ import (
 
 var (
 	palette = struct {
-		miroPrefixGreen uint32
-		miroChevronTeal uint32
+		miroGreen   uint32
+		chevronTeal uint32
+		info        uint32
+		pass        uint32
+		fail        uint32
 	}{
-		miroPrefixGreen: 0x70E000,
-		miroChevronTeal: 0x1DD3B0,
+		miroGreen:   0x70E000,
+		chevronTeal: 0x1DD3B0,
+		info:        0xf5f2e1,
+		pass:        0x7bf1a8,
+		fail:        0xff8fa3,
 	}
 
-	chevron = NewStyle().FG(palette.miroChevronTeal).Bold().Italic().Apply("›")
-	prefix  = NewStyle().FG(palette.miroPrefixGreen).Bold().Italic().Apply("miro") + " " + chevron + " "
+	chevron = NewStyle().FG(palette.chevronTeal).Bold().Italic().Apply("›")
+	prefix  = NewStyle().FG(palette.miroGreen).Bold().Italic().Apply("miro") + " " + chevron + " "
 )
 
-func Prefix() string {
-	return prefix
+func label(text string, color uint32) string {
+	return NewStyle().FG(color).Apply(text)
+}
+
+func LabelPass(text string) string {
+	return label(text, palette.pass)
+}
+
+func LabelFail(text string) string {
+	return label(text, palette.fail)
+}
+
+func LabelInfo(text string) string {
+	return label(text, palette.info)
 }
 
 func Format(msg string) string {
 	body := strings.TrimRight(msg, "\n")
 	suffix := msg[len(body):]
-	return Prefix() + body + suffix
+	return prefix + body + suffix
 }
 
 func Println(msg string) {

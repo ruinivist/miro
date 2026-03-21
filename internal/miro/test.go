@@ -88,7 +88,7 @@ func runTests(path string, tio testIO) error {
 
 	summary := testSummary{total: len(scenarios)}
 	for _, scenario := range scenarios {
-		output.Fprintf(tio.out, "RUN %s\n", scenario.relPath)
+		output.Fprintf(tio.out, "%s %s\n", output.LabelInfo("RUN"), scenario.relPath)
 
 		if err := replayScenario(scenario, shellPath, tio, cfg.Sandbox); err != nil {
 			summary.failed++
