@@ -88,24 +88,30 @@ func runTests(path string, tio testIO) error {
 
 	summary := testSummary{total: len(scenarios)}
 	for _, scenario := range scenarios {
-		output.Fprintf(tio.out, "%s %s\n", output.LabelInfo("RUN"), scenario.relPath)
+		output.Fprintf(tio.out, "%s %s\n", output.Label("RUN", output.Info), scenario.relPath)
 
 		if err := replayScenario(scenario, shellPath, tio, cfg.Sandbox); err != nil {
 			summary.failed++
-			output.Fprintf(tio.out, "FAIL %s: %v\n", scenario.relPath, err)
+			output.Fprintf(tio.out, "%s %s: %v\n", output.Label("FAIL", output.Fail), scenario.relPath, err)
 			continue
 		}
 
 		summary.passed++
-		output.Fprintf(tio.out, "PASS %s\n", scenario.relPath)
+		output.Fprintf(tio.out, "%s %s\n", output.Label("PASS", output.Pass), scenario.relPath)
+	}
+
+	summaryColor := output.Pass
+	if summary.failed > 0 {
+		summaryColor = output.Fail
 	}
 
 	output.Fprintf(
 		tio.out,
-		"Summary: total=%d passed=%d failed=%d\n",
-		summary.total,
-		summary.passed,
-		summary.failed,
+		"%s\n",
+		output.Label(
+			fmt.Sprintf("Summary: total=%d passed=%d failed=%d", summary.total, summary.passed, summary.failed),
+			summaryColor,
+		),
 	)
 
 	if summary.failed > 0 {

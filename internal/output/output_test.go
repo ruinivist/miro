@@ -29,14 +29,14 @@ func TestFormatPlainWhenNoColorSet(t *testing.T) {
 func TestLabelsPlainWhenNoColorSet(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
-	if got := LabelInfo("RUN"); got != "RUN" {
-		t.Fatalf("LabelInfo() = %q, want %q", got, "RUN")
+	if got := Label("RUN", Info); got != "RUN" {
+		t.Fatalf("Label() = %q, want %q", got, "RUN")
 	}
-	if got := LabelPass("PASS"); got != "PASS" {
-		t.Fatalf("LabelPass() = %q, want %q", got, "PASS")
+	if got := Label("PASS", Pass); got != "PASS" {
+		t.Fatalf("Label() = %q, want %q", got, "PASS")
 	}
-	if got := LabelFail("FAIL"); got != "FAIL" {
-		t.Fatalf("LabelFail() = %q, want %q", got, "FAIL")
+	if got := Label("FAIL", Fail); got != "FAIL" {
+		t.Fatalf("Label() = %q, want %q", got, "FAIL")
 	}
 }
 

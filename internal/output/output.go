@@ -17,26 +17,39 @@ var (
 	}{
 		miroGreen:   0x70E000,
 		chevronTeal: 0x1DD3B0,
-		info:        0xf5f2e1,
-		pass:        0x7bf1a8,
-		fail:        0xff8fa3,
+		info:        0xD7FFFF,
+		pass:        0x87D75F,
+		fail:        0xFF8787,
 	}
 )
 
-func label(text string, color uint32) string {
-	return NewStyle().FG(color).Apply(text)
+type Color int
+
+const (
+	Info Color = iota
+	Pass
+	Fail
+)
+
+func label(text string, color Color) string {
+	var fg uint32
+
+	switch color {
+	case Info:
+		fg = palette.info
+	case Pass:
+		fg = palette.pass
+	case Fail:
+		fg = palette.fail
+	default:
+		fg = palette.info
+	}
+
+	return NewStyle().FG(fg).Apply(text)
 }
 
-func LabelPass(text string) string {
-	return label(text, palette.pass)
-}
-
-func LabelFail(text string) string {
-	return label(text, palette.fail)
-}
-
-func LabelInfo(text string) string {
-	return label(text, palette.info)
+func Label(text string, color Color) string {
+	return label(text, color)
 }
 
 func noColor() bool {
