@@ -11,7 +11,11 @@ var (
 	scriptDonePrefix  = []byte("Script done on ")
 )
 
-const eofByte = byte(0x04)
+const (
+	eofByte  = byte(0x04)
+	escByte  = byte(0x1b)
+	bellByte = byte(0x07)
+)
 
 func loadRecordedInput(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
@@ -36,10 +40,15 @@ func loadRecordedOutput(path string) ([]byte, error) {
 	}
 
 	if !hasScriptWrapper(data) {
-		return data, nil
+		return stripTerminalTitlePrefixes(data), nil
 	}
 
-	return stripScriptWrapper(data)
+	data, err = stripScriptWrapper(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return stripTerminalTitlePrefixes(data), nil
 }
 
 func hasScriptWrapper(data []byte) bool {
@@ -123,4 +132,51 @@ func trimTrailingReplayNewline(data []byte) []byte {
 	}
 
 	return data
+}
+
+func stripTerminalTitlePrefixes(data []byte) []byte {
+	var cleaned []byte
+
+	for i := 0; i < len(data); {
+		if !hasTerminalTitlePrefixAt(data, i) {
+			if cleaned != nil {
+				cleaned = append(cleaned, data[i])
+			}
+			i++
+			continue
+		}
+
+		end := bytes.IndexByte(data[i+4:], bellByte)
+		if end == -1 {
+			if cleaned == nil {
+				return data
+			}
+			cleaned = append(cleaned, data[i:]...)
+			return cleaned
+		}
+
+		if cleaned == nil {
+			cleaned = make([]byte, 0, len(data))
+			cleaned = append(cleaned, data[:i]...)
+		}
+
+		i += 4 + end + 1
+	}
+
+	if cleaned == nil {
+		return data
+	}
+
+	return cleaned
+}
+
+func hasTerminalTitlePrefixAt(data []byte, i int) bool {
+	if i+4 > len(data) {
+		return false
+	}
+
+	return data[i] == escByte &&
+		data[i+1] == ']' &&
+		data[i+2] == '0' &&
+		data[i+3] == ';'
 }
