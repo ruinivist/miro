@@ -47,8 +47,8 @@ type testMismatchError struct {
 }
 
 const (
-	replayPromptReadyMarker  = "\x1b[?2004h$ "
-	replayPromptReadyTimeout = 30 * time.Second
+	replayPromptReadyMarker  = compareOutputMarker
+	replayPromptReadyTimeout = 2 * time.Second
 )
 
 func (e *testMismatchError) Error() string {
@@ -260,24 +260,16 @@ func replayScenario(scenario testScenario, shellPath string, _ testIO, sandboxCo
 		compareMarkerEnvName: compareMarkerEnabledValue,
 	})
 
-	outputLog := io.Writer(rawOutFile)
-	var promptWriter *replayPromptWriter
-	var promptReady <-chan struct{}
-	if replayNeedsInteractivePrompt(input) {
-		ready := make(chan struct{})
-		promptWriter = newReplayPromptWriter(rawOutFile, replayPromptReadyMarker, ready)
-		outputLog = promptWriter
-		promptReady = ready
-
-		promptTimeout := time.AfterFunc(replayPromptReadyTimeout, promptWriter.release)
-		defer promptTimeout.Stop()
-	}
+	ready := make(chan struct{})
+	promptWriter := newReplayPromptWriter(rawOutFile, replayPromptReadyMarker, ready)
+	promptTimeout := time.AfterFunc(replayPromptReadyTimeout, promptWriter.release)
+	defer promptTimeout.Stop()
 
 	if err := screen.Replay(screen.ReplayRequest{
-		Cmd:       cmd,
-		Input:     input,
-		InputReady: promptReady,
-		OutputLog: outputLog,
+		Cmd:        cmd,
+		Input:      input,
+		InputReady: ready,
+		OutputLog:  promptWriter,
 	}); err != nil {
 		rawOutFile.Close()
 		return fmt.Errorf("replay failed: %v", err)
@@ -285,8 +277,8 @@ func replayScenario(scenario testScenario, shellPath string, _ testIO, sandboxCo
 	if err := rawOutFile.Close(); err != nil {
 		return fmt.Errorf("failed to close replay output: %v", err)
 	}
-	if promptWriter != nil && !promptWriter.seen {
-		return fmt.Errorf("replay shell never reached the initial interactive prompt; inspect %q or rerun `mire init`", shellPath)
+	if !promptWriter.seen {
+		return fmt.Errorf("replay shell never emitted %q; rerun `mire init` or refresh %q", compareOutputMarker, shellPath)
 	}
 
 	got, err := loadRecordedOutput(rawOut)
@@ -328,7 +320,7 @@ func trimReplayOutputToMarker(data []byte, shellPath string) ([]byte, error) {
 	idx := bytes.Index(data, []byte(compareOutputMarker))
 	if idx == -1 {
 		return nil, fmt.Errorf(
-			"missing compare marker %q in replay output; rerun `mire init` or refresh %q",
+			"missing replay start marker %q in replay output; rerun `mire init` or refresh %q",
 			compareOutputMarker,
 			shellPath,
 		)
@@ -343,20 +335,6 @@ func trimReplayOutputToMarker(data []byte, shellPath string) ([]byte, error) {
 	default:
 		return data, nil
 	}
-}
-
-func replayNeedsInteractivePrompt(input []byte) bool {
-	for _, b := range input {
-		switch b {
-		case '\r', '\n', eofByte:
-			continue
-		}
-		if b < 0x20 || b == 0x7f || b == 0x1b {
-			return true
-		}
-	}
-
-	return false
 }
 
 type replayPromptWriter struct {

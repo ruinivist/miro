@@ -123,6 +123,35 @@ func TestReplayScenarioUsesRecordedInputAndKeepsReplayOutputQuiet(t *testing.T) 
 	}
 }
 
+func TestReplayScenarioWaitsForPromptReadyMarkerBeforeSendingInput(t *testing.T) {
+	testutil.RequireCommands(t, "bwrap", "bash")
+
+	testDir := filepath.Join(t.TempDir(), "e2e")
+	shellPath := filepath.Join(testDir, "shell.sh")
+	mustWriteRecordShell(t, testDir)
+	scenarioDir := filepath.Join(testDir, "suite", "spec")
+	testutil.WriteScenarioFixtures(
+		t,
+		scenarioDir,
+		"echo ab\x7fc\nexit\n",
+		"\x1b[?2004h$ echo ab\b \bc\r\n\x1b[?2004l\rac\r\n\x1b[?2004h$ exit\r\n\x1b[?2004l\rexit\r\n",
+	)
+
+	err := replayScenario(testScenario{
+		dir:          scenarioDir,
+		relPath:      filepath.Join("suite", "spec"),
+		inPath:       filepath.Join(scenarioDir, "in"),
+		outPath:      filepath.Join(scenarioDir, "out"),
+		setupScripts: nil,
+	}, shellPath, testIO{
+		out: &bytes.Buffer{},
+		err: &bytes.Buffer{},
+	}, defaultSandboxConfig())
+	if err != nil {
+		t.Fatalf("replayScenario() error = %v", err)
+	}
+}
+
 func TestReplayScenarioFailsWhenCompareMarkerMissing(t *testing.T) {
 	testDir := filepath.Join(t.TempDir(), "e2e")
 	shellPath := filepath.Join(testDir, "shell.sh")
@@ -146,29 +175,8 @@ func TestReplayScenarioFailsWhenCompareMarkerMissing(t *testing.T) {
 	if err == nil {
 		t.Fatal("replayScenario() error = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "missing compare marker") || !strings.Contains(err.Error(), "rerun `mire init`") {
-		t.Fatalf("replayScenario() error = %q, want compare marker refresh hint", err.Error())
-	}
-}
-
-func TestReplayNeedsInteractivePrompt(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{name: "plain text", input: "echo hello\nexit\n", want: false},
-		{name: "backspace", input: "echo ab\x7fc\n", want: true},
-		{name: "escape sequence", input: "echo a\x1b[D\n", want: true},
-		{name: "eof suffix only", input: "echo hello\r" + string([]byte{eofByte}), want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := replayNeedsInteractivePrompt([]byte(tt.input)); got != tt.want {
-				t.Fatalf("replayNeedsInteractivePrompt(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
+	if !strings.Contains(err.Error(), "__MIRE_PROMPT_READY__") || !strings.Contains(err.Error(), "rerun `mire init`") {
+		t.Fatalf("replayScenario() error = %q, want prompt-ready marker refresh hint", err.Error())
 	}
 }
 

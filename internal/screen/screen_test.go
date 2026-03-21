@@ -78,10 +78,10 @@ func TestReplayWaitsForInputReadySignal(t *testing.T) {
 	}()
 
 	if err := Replay(ReplayRequest{
-		Cmd:       cmd,
-		Input:     []byte("hello\n"),
+		Cmd:        cmd,
+		Input:      []byte("hello\n"),
 		InputReady: ready,
-		OutputLog: &outputLog,
+		OutputLog:  &outputLog,
 	}); err != nil {
 		t.Fatalf("Replay() error = %v", err)
 	}

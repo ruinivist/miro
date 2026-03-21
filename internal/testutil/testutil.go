@@ -388,8 +388,12 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
-
-/bin/stty -echo 2>/dev/null || true
+if [ "${MIRE_COMPARE_MARKER:-0}" = "1" ]; then
+  /bin/stty -echo 2>/dev/null || true
+  printf '%s\n' '__MIRE_PROMPT_READY__'
+else
+  /bin/stty -echo 2>/dev/null || true
+fi
 while IFS= read -r line || [ -n "$line" ]; do
   printf '%s\n' "$line"
   if [ "$line" = "exit" ]; then

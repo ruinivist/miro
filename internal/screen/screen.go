@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
@@ -15,9 +16,10 @@ import (
 )
 
 const (
-	defaultRows = 24
-	defaultCols = 80
-	terminalEOF = byte(0x04)
+	defaultRows            = 24
+	defaultCols            = 80
+	terminalEOF            = byte(0x04)
+	replayReadySettleDelay = 10 * time.Millisecond
 )
 
 type RecordRequest struct {
@@ -30,10 +32,10 @@ type RecordRequest struct {
 }
 
 type ReplayRequest struct {
-	Cmd       *exec.Cmd
-	Input     []byte
+	Cmd        *exec.Cmd
+	Input      []byte
 	InputReady <-chan struct{}
-	OutputLog io.Writer
+	OutputLog  io.Writer
 }
 
 func Record(req RecordRequest) error {
@@ -91,9 +93,11 @@ func Replay(req ReplayRequest) error {
 	defer ptmx.Close()
 
 	outputDone := copyAsync(combineWriters(req.OutputLog), ptmx)
-	inputDone := copyAsyncWhenReady(ptmx, bytes.NewReader(replayInput(req.Input)), req.InputReady)
+	processDone := make(chan struct{})
+	inputDone := copyAsyncWhenReady(ptmx, bytes.NewReader(replayInput(req.Input)), req.InputReady, processDone)
 
 	waitErr := req.Cmd.Wait()
+	close(processDone)
 	ptmx.Close()
 
 	outputErr := <-outputDone
@@ -129,11 +133,17 @@ func copyAsync(dst io.Writer, src io.Reader) <-chan error {
 	return done
 }
 
-func copyAsyncWhenReady(dst io.Writer, src io.Reader, ready <-chan struct{}) <-chan error {
+func copyAsyncWhenReady(dst io.Writer, src io.Reader, ready <-chan struct{}, stop <-chan struct{}) <-chan error {
 	done := make(chan error, 1)
 	go func() {
 		if ready != nil {
-			<-ready
+			select {
+			case <-ready:
+				time.Sleep(replayReadySettleDelay)
+			case <-stop:
+				done <- nil
+				return
+			}
 		}
 		_, err := io.Copy(dst, src)
 		done <- normalizeCopyError(err)

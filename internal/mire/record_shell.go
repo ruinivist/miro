@@ -15,7 +15,7 @@ const recordShellName = "shell.sh"
 const (
 	compareMarkerEnvName      = "MIRE_COMPARE_MARKER"
 	compareMarkerEnabledValue = "1"
-	compareOutputMarker       = "__MIRE_E2E_BEGIN__"
+	compareOutputMarker       = "__MIRE_PROMPT_READY__"
 )
 
 //go:embed record_shell.sh

@@ -132,7 +132,8 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		`set -- "$@" --ro-bind "$host_path" "$visible_path"`,
 		"${MIRE_SETUP_SCRIPTS-}",
 		`if [ "${MIRE_COMPARE_MARKER:-0}" = "1" ]; then`,
-		"printf '__MIRE_E2E_BEGIN__\\n'",
+		"printf '__MIRE_PROMPT_READY__\\n'",
+		"PROMPT_COMMAND=__mire_prompt_ready",
 		"--bind \"$host_home\" \"$visible_home\"",
 		"--bind \"$host_tmp\" '/tmp'",
 		"--setenv HOME \"$visible_home\"",
@@ -146,6 +147,9 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("wrapper = %q, want substring %q", body, want)
 		}
+	}
+	if strings.Contains(body, "printf '__MIRE_E2E_BEGIN__\\n'") {
+		t.Fatalf("wrapper = %q, want old compare marker removed", body)
 	}
 }
 

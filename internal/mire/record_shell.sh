@@ -19,11 +19,21 @@ for path in /tmp/mire-setup-scripts/*.sh; do
   source "$path"
   cd "${HOME:?}"
 done
-EOF
 
 if [ "${MIRE_COMPARE_MARKER:-0}" = "1" ]; then
-  printf '__MIRE_E2E_BEGIN__\n'
+  __mire_prompt_ready_original=${PROMPT_COMMAND-}
+  __mire_prompt_ready() {
+    printf '__MIRE_PROMPT_READY__\n'
+    if [ -n "${__mire_prompt_ready_original:-}" ]; then
+      PROMPT_COMMAND=$__mire_prompt_ready_original
+      eval "$PROMPT_COMMAND"
+    else
+      unset PROMPT_COMMAND
+    fi
+  }
+  PROMPT_COMMAND=__mire_prompt_ready
 fi
+EOF
 
 set -- \
   --ro-bind / / \
