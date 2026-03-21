@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"miro/internal/output"
 )
 
 func TestRunShowsHelpWhenNoArgs(t *testing.T) {
@@ -551,6 +549,7 @@ func TestRunUnknownCommand(t *testing.T) {
 
 func captureOutput(t *testing.T, fn func()) (string, string) {
 	t.Helper()
+	t.Setenv("NO_COLOR", "1")
 
 	stdoutReader, stdoutWriter, err := os.Pipe()
 	if err != nil {
@@ -593,7 +592,7 @@ func captureOutput(t *testing.T, fn func()) (string, string) {
 }
 
 func prefixed(msg string) string {
-	return output.Format(msg)
+	return "miro › " + msg
 }
 
 func writeFile(t *testing.T, path, content string) {

@@ -40,7 +40,7 @@ func (s Style) BG(rgb uint32) Style {
 }
 
 func (s Style) Apply(text string) string {
-	if !s.bold && !s.italic && s.fg == nil && s.bg == nil {
+	if noColor() || (!s.bold && !s.italic && s.fg == nil && s.bg == nil) {
 		return text
 	}
 

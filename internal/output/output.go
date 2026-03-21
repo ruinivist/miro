@@ -21,9 +21,6 @@ var (
 		pass:        0x7bf1a8,
 		fail:        0xff8fa3,
 	}
-
-	chevron = NewStyle().FG(palette.chevronTeal).Bold().Italic().Apply("›")
-	prefix  = NewStyle().FG(palette.miroGreen).Bold().Italic().Apply("miro") + " " + chevron + " "
 )
 
 func label(text string, color uint32) string {
@@ -42,10 +39,19 @@ func LabelInfo(text string) string {
 	return label(text, palette.info)
 }
 
+func noColor() bool {
+	return os.Getenv("NO_COLOR") != ""
+}
+
+func prefix() string {
+	chevron := NewStyle().FG(palette.chevronTeal).Bold().Italic().Apply("›")
+	return NewStyle().FG(palette.miroGreen).Bold().Italic().Apply("miro") + " " + chevron + " "
+}
+
 func Format(msg string) string {
 	body := strings.TrimRight(msg, "\n")
 	suffix := msg[len(body):]
-	return prefix + body + suffix
+	return prefix() + body + suffix
 }
 
 func Println(msg string) {
