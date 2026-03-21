@@ -26,7 +26,7 @@ func loadRecordedInput(path string) ([]byte, error) {
 		}
 	}
 
-	return trimTrailingNewlineAfterEOF(data), nil
+	return trimTrailingReplayNewline(data), nil
 }
 
 func loadRecordedOutput(path string) ([]byte, error) {
@@ -108,8 +108,13 @@ func findScriptFooter(data []byte) (int, footerMatchState) {
 	return candidate, footerFound
 }
 
-func trimTrailingNewlineAfterEOF(data []byte) []byte {
-	if len(data) >= 2 && data[len(data)-2] == eofByte && data[len(data)-1] == '\n' {
+func trimTrailingReplayNewline(data []byte) []byte {
+	// util-linux script records the final Enter as "\r\n", but replay feeds the
+	// bytes from a file rather than a tty. If the shell exits after consuming the
+	// trailing '\r', the leftover '\n' can trigger script's ~2s non-tty stdin
+	// delay before it shuts down. Keep the '\r' that bash consumed, drop only the
+	// synthetic final '\n'. The same cleanup is needed after a terminal EOF byte.
+	if len(data) >= 2 && data[len(data)-1] == '\n' && (data[len(data)-2] == '\r' || data[len(data)-2] == eofByte) {
 		return data[:len(data)-1]
 	}
 

@@ -20,6 +20,21 @@ func TestLoadRecordedInputTrimsTrailingNewlineAfterEOF(t *testing.T) {
 	}
 }
 
+func TestLoadRecordedInputTrimsTrailingNewlineAfterCarriageReturn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "in")
+	writeFile(t, path, "echo hi\rexit\r\n")
+
+	got, err := loadRecordedInput(path)
+	if err != nil {
+		t.Fatalf("loadRecordedInput() error = %v", err)
+	}
+
+	want := "echo hi\rexit\r"
+	if string(got) != want {
+		t.Fatalf("loadRecordedInput() = %q, want %q", string(got), want)
+	}
+}
+
 func TestLoadRecordedInputLeavesNormalTrailingNewline(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "in")
 	writeFile(t, path, "echo hi\n")
