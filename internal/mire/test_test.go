@@ -151,6 +151,27 @@ func TestReplayScenarioFailsWhenCompareMarkerMissing(t *testing.T) {
 	}
 }
 
+func TestReplayNeedsInteractivePrompt(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{name: "plain text", input: "echo hello\nexit\n", want: false},
+		{name: "backspace", input: "echo ab\x7fc\n", want: true},
+		{name: "escape sequence", input: "echo a\x1b[D\n", want: true},
+		{name: "eof suffix only", input: "echo hello\r" + string([]byte{eofByte}), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := replayNeedsInteractivePrompt([]byte(tt.input)); got != tt.want {
+				t.Fatalf("replayNeedsInteractivePrompt(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDiscoverTestScenariosUsesDisplayRootForRelativePaths(t *testing.T) {
 	testDir := filepath.Join(t.TempDir(), "e2e")
 	scopedDir := filepath.Join(testDir, "nested")

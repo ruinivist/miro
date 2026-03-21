@@ -32,6 +32,7 @@ type RecordRequest struct {
 type ReplayRequest struct {
 	Cmd       *exec.Cmd
 	Input     []byte
+	InputReady <-chan struct{}
 	OutputLog io.Writer
 }
 
@@ -90,7 +91,7 @@ func Replay(req ReplayRequest) error {
 	defer ptmx.Close()
 
 	outputDone := copyAsync(combineWriters(req.OutputLog), ptmx)
-	inputDone := copyAsync(ptmx, bytes.NewReader(replayInput(req.Input)))
+	inputDone := copyAsyncWhenReady(ptmx, bytes.NewReader(replayInput(req.Input)), req.InputReady)
 
 	waitErr := req.Cmd.Wait()
 	ptmx.Close()
@@ -122,6 +123,18 @@ func combineWriters(writers ...io.Writer) io.Writer {
 func copyAsync(dst io.Writer, src io.Reader) <-chan error {
 	done := make(chan error, 1)
 	go func() {
+		_, err := io.Copy(dst, src)
+		done <- normalizeCopyError(err)
+	}()
+	return done
+}
+
+func copyAsyncWhenReady(dst io.Writer, src io.Reader, ready <-chan struct{}) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		if ready != nil {
+			<-ready
+		}
 		_, err := io.Copy(dst, src)
 		done <- normalizeCopyError(err)
 	}()

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"mire/internal/output"
@@ -44,6 +45,11 @@ type testMismatchError struct {
 	expected []byte
 	actual   []byte
 }
+
+const (
+	replayPromptReadyMarker  = "\x1b[?2004h$ "
+	replayPromptReadyTimeout = 30 * time.Second
+)
 
 func (e *testMismatchError) Error() string {
 	return "output differed"
@@ -254,16 +260,33 @@ func replayScenario(scenario testScenario, shellPath string, _ testIO, sandboxCo
 		compareMarkerEnvName: compareMarkerEnabledValue,
 	})
 
+	outputLog := io.Writer(rawOutFile)
+	var promptWriter *replayPromptWriter
+	var promptReady <-chan struct{}
+	if replayNeedsInteractivePrompt(input) {
+		ready := make(chan struct{})
+		promptWriter = newReplayPromptWriter(rawOutFile, replayPromptReadyMarker, ready)
+		outputLog = promptWriter
+		promptReady = ready
+
+		promptTimeout := time.AfterFunc(replayPromptReadyTimeout, promptWriter.release)
+		defer promptTimeout.Stop()
+	}
+
 	if err := screen.Replay(screen.ReplayRequest{
 		Cmd:       cmd,
 		Input:     input,
-		OutputLog: rawOutFile,
+		InputReady: promptReady,
+		OutputLog: outputLog,
 	}); err != nil {
 		rawOutFile.Close()
 		return fmt.Errorf("replay failed: %v", err)
 	}
 	if err := rawOutFile.Close(); err != nil {
 		return fmt.Errorf("failed to close replay output: %v", err)
+	}
+	if promptWriter != nil && !promptWriter.seen {
+		return fmt.Errorf("replay shell never reached the initial interactive prompt; inspect %q or rerun `mire init`", shellPath)
 	}
 
 	got, err := loadRecordedOutput(rawOut)
@@ -320,4 +343,75 @@ func trimReplayOutputToMarker(data []byte, shellPath string) ([]byte, error) {
 	default:
 		return data, nil
 	}
+}
+
+func replayNeedsInteractivePrompt(input []byte) bool {
+	for _, b := range input {
+		switch b {
+		case '\r', '\n', eofByte:
+			continue
+		}
+		if b < 0x20 || b == 0x7f || b == 0x1b {
+			return true
+		}
+	}
+
+	return false
+}
+
+type replayPromptWriter struct {
+	dst    io.Writer
+	marker []byte
+	tail   []byte
+	ready  chan struct{}
+	once   sync.Once
+	seen   bool
+}
+
+func newReplayPromptWriter(dst io.Writer, marker string, ready chan struct{}) *replayPromptWriter {
+	return &replayPromptWriter{
+		dst:    dst,
+		marker: []byte(marker),
+		ready:  ready,
+	}
+}
+
+func (w *replayPromptWriter) Write(p []byte) (int, error) {
+	n, err := w.dst.Write(p)
+	if n > 0 {
+		w.observe(p[:n])
+	}
+	return n, err
+}
+
+func (w *replayPromptWriter) observe(p []byte) {
+	if w.seen || len(w.marker) == 0 {
+		return
+	}
+
+	data := make([]byte, 0, len(w.tail)+len(p))
+	data = append(data, w.tail...)
+	data = append(data, p...)
+
+	if bytes.Contains(data, w.marker) {
+		w.seen = true
+		w.release()
+	}
+
+	keep := len(w.marker) - 1
+	if keep <= 0 {
+		return
+	}
+	if len(data) <= keep {
+		w.tail = append(w.tail[:0], data...)
+		return
+	}
+
+	w.tail = append(w.tail[:0], data[len(data)-keep:]...)
+}
+
+func (w *replayPromptWriter) release() {
+	w.once.Do(func() {
+		close(w.ready)
+	})
 }

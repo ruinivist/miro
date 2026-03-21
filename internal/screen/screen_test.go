@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 )
 
 func TestRecordCopiesInputAndOutput(t *testing.T) {
@@ -62,5 +63,33 @@ func TestReplayCapturesOutput(t *testing.T) {
 	got := outputLog.String()
 	if !bytes.Contains([]byte(got), []byte("__MIRE_E2E_BEGIN__")) || !bytes.Contains([]byte(got), []byte("line:hello")) {
 		t.Fatalf("output log = %q, want marker + line:hello", got)
+	}
+}
+
+func TestReplayWaitsForInputReadySignal(t *testing.T) {
+	cmd := exec.Command("sh", "-c", `IFS= read -r line; printf 'line:%s\n' "$line"`)
+	ready := make(chan struct{})
+
+	var outputLog bytes.Buffer
+	start := time.Now()
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		close(ready)
+	}()
+
+	if err := Replay(ReplayRequest{
+		Cmd:       cmd,
+		Input:     []byte("hello\n"),
+		InputReady: ready,
+		OutputLog: &outputLog,
+	}); err != nil {
+		t.Fatalf("Replay() error = %v", err)
+	}
+
+	if elapsed := time.Since(start); elapsed < 100*time.Millisecond {
+		t.Fatalf("Replay() elapsed = %v, want >= %v", elapsed, 100*time.Millisecond)
+	}
+	if !bytes.Contains(outputLog.Bytes(), []byte("line:hello")) {
+		t.Fatalf("output log = %q, want line:hello", outputLog.String())
 	}
 }
