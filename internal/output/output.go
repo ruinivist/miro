@@ -7,12 +7,6 @@ import (
 	"strings"
 )
 
-const (
-	bold   = "\x1b[1m"
-	italic = "\x1b[3m"
-	reset  = "\x1b[0m"
-)
-
 var (
 	palette = struct {
 		miroPrefixGreen uint32
@@ -22,16 +16,12 @@ var (
 		miroChevronTeal: 0x1DD3B0,
 	}
 
-	chevron = ansiColor(palette.miroChevronTeal)
-	prefix  = ansiColor(palette.miroPrefixGreen) + bold + italic + "miro" + reset + " " + chevron + bold + italic + "›" + reset + " "
+	chevron = NewStyle().FG(palette.miroChevronTeal).Bold().Italic().Apply("›")
+	prefix  = NewStyle().FG(palette.miroPrefixGreen).Bold().Italic().Apply("miro") + " " + chevron + " "
 )
 
 func Prefix() string {
 	return prefix
-}
-
-func ansiColor(rgb uint32) string {
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", byte(rgb>>16), byte(rgb>>8), byte(rgb))
 }
 
 func Format(msg string) string {
