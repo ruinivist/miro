@@ -10,13 +10,17 @@ func newTestCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:  "test [path]",
 		Args: cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			path := ""
 			if len(args) == 1 {
 				path = args[0]
 			}
 
-			return mire.RunTests(path)
+			if err := mire.RunTests(path); err != nil {
+				cmd.PrintErrln(err)
+			}
+
+			return nil
 		},
 	}
 }
