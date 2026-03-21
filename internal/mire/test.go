@@ -2,6 +2,7 @@ package mire
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -36,6 +37,15 @@ type testSummary struct {
 type testFixtureFiles struct {
 	inPath  string
 	outPath string
+}
+
+type testMismatchError struct {
+	expected []byte
+	actual   []byte
+}
+
+func (e *testMismatchError) Error() string {
+	return "output differed"
 }
 
 // RunTests replays all scenarios under the configured test directory.
@@ -89,6 +99,10 @@ func runTests(path string, tio testIO) error {
 			elapsed := time.Since(start)
 			summary.failed++
 			output.Fprintf(tio.out, "%s %s (%s): %v\n", output.Label("FAIL", output.Fail), scenario.relPath, formatElapsed(elapsed), err)
+			var mismatchErr *testMismatchError
+			if errors.As(err, &mismatchErr) {
+				writeScenarioMismatch(tio.out, mismatchErr)
+			}
 			continue
 		}
 
@@ -256,10 +270,24 @@ func replayScenario(scenario testScenario, shellPath string, _ testIO, sandboxCo
 	}
 
 	if !bytes.Equal(got, want) {
-		return fmt.Errorf("output differed")
+		return &testMismatchError{
+			expected: want,
+			actual:   got,
+		}
 	}
 
 	return nil
+}
+
+func writeScenarioMismatch(w io.Writer, mismatch *testMismatchError) {
+	output.Fprintf(w, "Expected:\n%s", string(mismatch.expected))
+	if len(mismatch.expected) == 0 || mismatch.expected[len(mismatch.expected)-1] != '\n' {
+		output.Fprintf(w, "\n")
+	}
+	output.Fprintf(w, "Actual:\n%s", string(mismatch.actual))
+	if len(mismatch.actual) == 0 || mismatch.actual[len(mismatch.actual)-1] != '\n' {
+		output.Fprintf(w, "\n")
+	}
 }
 
 func trimReplayOutputToMarker(data []byte, shellPath string) ([]byte, error) {

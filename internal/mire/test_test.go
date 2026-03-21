@@ -157,6 +157,45 @@ func TestReplayScenarioFailsWhenCompareMarkerMissing(t *testing.T) {
 	}
 }
 
+func TestRunTestsShowsExpectedAndActualForMismatchedScenario(t *testing.T) {
+	root := t.TempDir()
+	testDir := filepath.Join(root, "e2e")
+	testutil.AddFakeRecordDependencies(t, "script")
+	t.Setenv("FAKE_SCRIPT_ECHO_STDIN", "1")
+
+	testutil.WriteFile(t, filepath.Join(root, "mire.toml"), testutil.ValidConfigContent("e2e"))
+	mustWriteRecordShell(t, testDir)
+	testutil.WriteScenarioFixtures(t, filepath.Join(testDir, "suite", "spec"), "echo two\n", "echo one\n")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := testutil.WithWorkingDir(t, root, func() error {
+		return runTests("", testIO{
+			out: &stdout,
+			err: &stderr,
+		})
+	})
+	if err != nil {
+		t.Fatalf("runTests() error = %v", err)
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+
+	for _, want := range []string{
+		"RUN suite/spec",
+		"FAIL suite/spec (",
+		"output differed",
+		"Expected:\necho one\n",
+		"Actual:\necho two\n",
+		"Summary: total=1 passed=0 failed=1",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want substring %q", stdout.String(), want)
+		}
+	}
+}
+
 func TestDiscoverTestScenariosUsesDisplayRootForRelativePaths(t *testing.T) {
 	testDir := filepath.Join(t.TempDir(), "e2e")
 	scopedDir := filepath.Join(testDir, "nested")
