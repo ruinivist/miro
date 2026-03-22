@@ -122,7 +122,7 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		"visible_home=${MIRE_HOME:?}",
 		"bootstrap_rc=\"$host_home/.mire-shell-rc\"",
 		"setup_scripts_dir='/tmp/mire-setup-scripts'",
-		"visible_bin_dir='/mire/bin'",
+		"visible_bin_dir='/tmp/mire/bin'",
 		"visible_bootstrap_rc=\"$visible_home/.mire-shell-rc\"",
 		"for path in /tmp/mire-setup-scripts/*.sh; do",
 		"source \"$path\"",
@@ -145,8 +145,6 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		`if [ "${MIRE_COMPARE_MARKER:-0}" = "1" ]; then`,
 		"printf '__MIRE_PROMPT_READY__\\n'",
 		"PROMPT_COMMAND=__mire_prompt_ready",
-		"--tmpfs /mire",
-		"--dir \"$visible_bin_dir\"",
 		"--bind \"$host_home\" \"$visible_home\"",
 		"--bind \"$host_tmp\" '/tmp'",
 		"--setenv HOME \"$visible_home\"",
@@ -155,6 +153,8 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		"--setenv TERM 'xterm-256color'",
 		"--setenv TZ 'UTC'",
 		"--chdir \"$visible_home\"",
+		"--dir /tmp/mire",
+		"--dir \"$visible_bin_dir\"",
 		"exec bwrap \"$@\" bash --noprofile --rcfile \"$visible_bootstrap_rc\" -i",
 	} {
 		if !strings.Contains(body, want) {

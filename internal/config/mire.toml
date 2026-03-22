@@ -8,6 +8,6 @@
   # read only paths from host, entry looks like "path on host:path on sanbox"
   # paths on host are absolute or relative to repo root
   mounts = []
-  # read only host paths to expose on PATH inside the sandbox as /mire/bin/<basename>
+  # read only host paths to expose on PATH inside the sandbox as /tmp/mire/bin/<basename>
   # paths on host can be absolute or relative to repo root
   paths = []

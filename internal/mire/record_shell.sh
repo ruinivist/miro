@@ -8,7 +8,7 @@ visible_home=${MIRE_HOME:?}
 bootstrap_rc="$host_home/.mire-shell-rc"
 visible_bootstrap_rc="$visible_home/.mire-shell-rc"
 setup_scripts_dir='/tmp/mire-setup-scripts'
-visible_bin_dir='/mire/bin'
+visible_bin_dir='/tmp/mire/bin'
 
 cat >"$bootstrap_rc" <<'EOF'
 cd "${HOME:?}"
@@ -35,11 +35,10 @@ if [ "${MIRE_COMPARE_MARKER:-0}" = "1" ]; then
 fi
 EOF
 
+# the first ro-bind allows for /usr/bin etc to be mounted and accessible
 set -- \
   --ro-bind / / \
   --tmpfs /home \
-  --tmpfs /mire \
-  --dir "$visible_bin_dir" \
   --bind "$host_home" "$visible_home" \
   --bind "$host_tmp" '/tmp' \
   --dev /dev \
@@ -57,6 +56,8 @@ set -- \
   --setenv TMPDIR '/tmp' \
   --setenv TZ 'UTC' \
   --chdir "$visible_home"
+
+set -- "$@" --dir /tmp/mire --dir "$visible_bin_dir"
 
 if [ -n "${MIRE_SETUP_SCRIPTS:-}" ]; then
   i=1
