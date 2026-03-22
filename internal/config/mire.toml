@@ -6,4 +6,5 @@
   # home is where mire would drop you by default on record
   home = "/home/test"
   # read only paths from host, entry looks like "path on host:path on sanbox"
+  # paths on host are absolute or relative to repo root
   mounts = []

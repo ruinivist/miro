@@ -17,16 +17,26 @@ func TestReadConfig(t *testing.T) {
 		wantMounts  []string
 		wantErr     string
 		wantMissing bool
+		setup       func(t *testing.T, dir string) (string, []string)
 	}{
 		{
-			name:    "with test dir and sandbox",
-			content: "[mire]\ntest_dir = \"custom/suite\"\n\n[sandbox]\nhome = \"/home/test\"\nmounts = [\"/host/data:/sandbox/data\", \"/host/cache:/sandbox/cache\"]\nkey_word = \"value\"\n",
+			name: "with test dir and sandbox",
+			setup: func(t *testing.T, dir string) (string, []string) {
+				hostData := filepath.Join(dir, "host-data")
+				hostCache := filepath.Join(dir, "host-cache")
+				for _, path := range []string{hostData, hostCache} {
+					if err := os.MkdirAll(path, 0o755); err != nil {
+						t.Fatalf("MkdirAll(%q) error = %v", path, err)
+					}
+				}
+				return "[mire]\ntest_dir = \"custom/suite\"\n\n[sandbox]\nhome = \"/home/test\"\nmounts = [\"" + hostData + ":/sandbox/data\", \"" + hostCache + ":/sandbox/cache\"]\nkey_word = \"value\"\n",
+					[]string{hostData + ":/sandbox/data", hostCache + ":/sandbox/cache"}
+			},
 			wantDir: "custom/suite",
 			wantSandbox: map[string]string{
 				"home":     "/home/test",
 				"key_word": "value",
 			},
-			wantMounts: []string{"/host/data:/sandbox/data", "/host/cache:/sandbox/cache"},
 		},
 		{
 			name:    "legacy top level key",
@@ -97,13 +107,39 @@ func TestReadConfig(t *testing.T) {
 			name:        "missing file",
 			wantMissing: true,
 		},
+		{
+			name: "normalizes relative mount host path",
+			setup: func(t *testing.T, dir string) (string, []string) {
+				hostBuild := filepath.Join(dir, "build")
+				if err := os.MkdirAll(hostBuild, 0o755); err != nil {
+					t.Fatalf("MkdirAll(%q) error = %v", hostBuild, err)
+				}
+				return "[mire]\ntest_dir = \"custom/suite\"\n\n[sandbox]\nhome = \"/home/test\"\nmounts = [\"./build:/sandbox/build\"]\n",
+					[]string{hostBuild + ":/sandbox/build"}
+			},
+			wantDir: "custom/suite",
+			wantSandbox: map[string]string{
+				"home": "/home/test",
+			},
+		},
+		{
+			name:    "missing mount host path",
+			content: "[mire]\ntest_dir = \"custom/suite\"\n\n[sandbox]\nhome = \"/home/test\"\nmounts = [\"./missing:/sandbox/build\"]\n",
+			wantErr: "sandbox mount host path",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "mire.toml")
+			dir := t.TempDir()
+			path := filepath.Join(dir, "mire.toml")
+			wantMounts := tt.wantMounts
+			content := tt.content
+			if tt.setup != nil {
+				content, wantMounts = tt.setup(t, dir)
+			}
 			if !tt.wantMissing {
-				if err := os.WriteFile(path, []byte(tt.content), 0o644); err != nil {
+				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 					t.Fatalf("WriteFile() error = %v", err)
 				}
 			}
@@ -138,10 +174,10 @@ func TestReadConfig(t *testing.T) {
 					t.Fatalf("ReadConfig() Sandbox[%q] = %q, want %q", key, got.Sandbox[key], want)
 				}
 			}
-			if len(got.Mounts) != len(tt.wantMounts) {
-				t.Fatalf("ReadConfig() Mounts = %#v, want %#v", got.Mounts, tt.wantMounts)
+			if len(got.Mounts) != len(wantMounts) {
+				t.Fatalf("ReadConfig() Mounts = %#v, want %#v", got.Mounts, wantMounts)
 			}
-			for i, want := range tt.wantMounts {
+			for i, want := range wantMounts {
 				if got.Mounts[i] != want {
 					t.Fatalf("ReadConfig() Mounts[%d] = %q, want %q", i, got.Mounts[i], want)
 				}

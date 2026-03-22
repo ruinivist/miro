@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -151,7 +152,33 @@ func validateSandbox(path string, sandbox map[string]string, mounts []string) (m
 		return nil, nil, fmt.Errorf("failed to read %s: sandbox.home must be an absolute path", path)
 	}
 
-	return validated, cloneMounts(mounts), nil
+	validatedMounts, err := normalizeMounts(path, mounts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return validated, validatedMounts, nil
+}
+
+func normalizeMounts(configPath string, mounts []string) ([]string, error) {
+	baseDir := filepath.Dir(configPath)
+	normalized := make([]string, 0, len(mounts))
+	for _, mount := range mounts {
+		hostPath, sandboxPath, ok := strings.Cut(mount, ":")
+		if !ok {
+			normalized = append(normalized, mount)
+			continue
+		}
+		if !filepath.IsAbs(hostPath) {
+			hostPath = filepath.Clean(filepath.Join(baseDir, hostPath))
+		}
+		if _, err := os.Stat(hostPath); err != nil {
+			return nil, fmt.Errorf("failed to read %s: sandbox mount host path %q does not exist", configPath, hostPath)
+		}
+		normalized = append(normalized, hostPath+":"+sandboxPath)
+	}
+
+	return normalized, nil
 }
 
 func cloneSandbox(sandbox map[string]string) map[string]string {
