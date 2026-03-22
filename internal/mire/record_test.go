@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"mire/internal/testutil"
 )
@@ -312,6 +313,94 @@ func TestRecordScenarioUsesDeterministicSandbox(t *testing.T) {
 	}
 	if strings.Contains(recordedOut, "\r\nFOUND\r\n") {
 		t.Fatalf("saved out = %q, want repo to stay unavailable", recordedOut)
+	}
+}
+
+func TestRecordScenarioStripsInterruptsFromSavedFixtures(t *testing.T) {
+	testutil.RequireCommands(t, "bwrap", "bash")
+
+	root := t.TempDir()
+	testDir := filepath.Join(root, "e2e")
+	target := filepath.Join(testDir, "suite", "spec")
+	testutil.MustMkdirAll(t, target)
+	mustWriteRecordShell(t, testDir)
+
+	err := testutil.WithWorkingDir(t, root, func() error {
+		reader, writer, pipeErr := os.Pipe()
+		if pipeErr != nil {
+			t.Fatalf("os.Pipe() error = %v", pipeErr)
+		}
+		t.Cleanup(func() {
+			_ = reader.Close()
+			_ = writer.Close()
+		})
+
+		errWriter := &promptSignalBuffer{
+			marker: "Save recording?",
+			ready:  make(chan struct{}),
+		}
+
+		writeDone := make(chan error, 1)
+		go func() {
+			defer close(writeDone)
+			defer writer.Close()
+
+			for _, chunk := range []struct {
+				data  string
+				delay time.Duration
+			}{
+				{data: "echo a\n", delay: 100 * time.Millisecond},
+				{data: "echo ", delay: 100 * time.Millisecond},
+				{data: "\x03", delay: 100 * time.Millisecond},
+				{data: "exit\n", delay: 0},
+			} {
+				if _, err := writer.Write([]byte(chunk.data)); err != nil {
+					writeDone <- err
+					return
+				}
+				if chunk.delay > 0 {
+					time.Sleep(chunk.delay)
+				}
+			}
+
+			<-errWriter.ready
+
+			if _, err := writer.Write([]byte("y\n")); err != nil {
+				writeDone <- err
+				return
+			}
+
+			writeDone <- nil
+		}()
+
+		err := recordScenario(target, recordShellPath(testDir), recordIO{
+			in:  reader,
+			out: ioDiscard{},
+			err: errWriter,
+		}, defaultSandboxConfig(), nil, nil, nil)
+		if writeErr := <-writeDone; writeErr != nil {
+			t.Fatalf("write record input: %v", writeErr)
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatalf("recordScenario() error = %v", err)
+	}
+
+	recordedIn := testutil.ReadFile(t, filepath.Join(target, "in"))
+	if recordedIn != "echo a\nexit\n" {
+		t.Fatalf("saved in = %q, want %q", recordedIn, "echo a\nexit\n")
+	}
+
+	recordedOut := testutil.ReadFile(t, filepath.Join(target, "out"))
+	if strings.Contains(recordedOut, "^C") {
+		t.Fatalf("saved out = %q, want interrupt output removed", recordedOut)
+	}
+	if strings.Contains(recordedOut, "echo exit\r\n") {
+		t.Fatalf("saved out = %q, want interrupted line removed before exit", recordedOut)
+	}
+	if !strings.Contains(recordedOut, "exit\r\n") {
+		t.Fatalf("saved out = %q, want exit preserved", recordedOut)
 	}
 }
 

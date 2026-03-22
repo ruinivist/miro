@@ -57,6 +57,7 @@ func recordScenario(target, shellPath string, rio recordIO, sandboxConfig map[st
 	if err != nil {
 		return err
 	}
+	recordedIn, recordedOut = sanitizeInterrupts(recordedIn, recordedOut)
 
 	if err := os.WriteFile(filepath.Join(target, "in"), recordedIn, 0o644); err != nil {
 		return err

@@ -9,13 +9,17 @@ import (
 var (
 	scriptStartPrefix = []byte("Script started on ")
 	scriptDonePrefix  = []byte("Script done on ")
+	shellPromptPrefix = []byte("\x1b[?2004h$ ")
 )
 
 const (
-	eofByte  = byte(0x04)
-	escByte  = byte(0x1b)
-	bellByte = byte(0x07)
+	interruptByte = byte(0x03)
+	eofByte       = byte(0x04)
+	escByte       = byte(0x1b)
+	bellByte      = byte(0x07)
 )
+
+var interruptSuffix = []byte("^C\x1b[?2004l\r\x1b[?2004h\x1b[?2004l\r\r\n")
 
 func loadRecordedInput(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
@@ -49,6 +53,62 @@ func loadRecordedOutput(path string) ([]byte, error) {
 	}
 
 	return stripTerminalTitlePrefixes(data), nil
+}
+
+func sanitizeInterrupts(input, output []byte) ([]byte, []byte) {
+	return sanitizeInterruptInput(input), sanitizeInterruptOutput(output)
+}
+
+func sanitizeInterruptInput(data []byte) []byte {
+	cleaned := make([]byte, 0, len(data))
+	lineStart := 0
+
+	for _, b := range data {
+		if b == interruptByte {
+			cleaned = cleaned[:lineStart]
+			continue
+		}
+
+		cleaned = append(cleaned, b)
+		if b == '\n' {
+			lineStart = len(cleaned)
+		}
+	}
+
+	return cleaned
+}
+
+func sanitizeInterruptOutput(data []byte) []byte {
+	cleaned := make([]byte, 0, len(data))
+	cursor := 0
+
+	for {
+		suffixStart := bytes.Index(data[cursor:], interruptSuffix)
+		if suffixStart == -1 {
+			cleaned = append(cleaned, data[cursor:]...)
+			return cleaned
+		}
+		suffixStart += cursor
+
+		promptStart := bytes.LastIndex(data[cursor:suffixStart], shellPromptPrefix)
+		if promptStart == -1 {
+			end := suffixStart + len(interruptSuffix)
+			cleaned = append(cleaned, data[cursor:end]...)
+			cursor = end
+			continue
+		}
+		promptStart += cursor
+
+		if bytes.IndexByte(data[promptStart+len(shellPromptPrefix):suffixStart], '\n') != -1 {
+			end := suffixStart + len(interruptSuffix)
+			cleaned = append(cleaned, data[cursor:end]...)
+			cursor = end
+			continue
+		}
+
+		cleaned = append(cleaned, data[cursor:promptStart]...)
+		cursor = suffixStart + len(interruptSuffix)
+	}
 }
 
 func hasScriptWrapper(data []byte) bool {
