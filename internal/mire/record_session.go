@@ -18,7 +18,7 @@ type recordIO struct {
 	err io.Writer
 }
 
-func recordScenario(target, shellPath string, rio recordIO, sandboxConfig map[string]string, mounts, paths, setupScripts []string) error {
+func recordScenario(target, shellPath string, rio recordIO, sandboxConfig map[string]string, mounts, paths, setupScripts []string, save bool) error {
 	rawIn, rawOut, cleanup, err := newRecordFiles()
 	if err != nil {
 		return err
@@ -45,12 +45,14 @@ func recordScenario(target, shellPath string, rio recordIO, sandboxConfig map[st
 	// as an error
 	runRecordSession(target, rawIn, rawOut, shellPath, sandbox, rio, sandboxConfig, mounts, paths, setupScripts)
 
-	save, err := confirmRecordSave(rio)
-	if err != nil {
-		return err
-	}
 	if !save {
-		return ErrRecordingDiscarded
+		save, err = confirmRecordSave(rio)
+		if err != nil {
+			return err
+		}
+		if !save {
+			return ErrRecordingDiscarded
+		}
 	}
 
 	recordedIn, recordedOut, err := loadRecordedFixtures(rawIn, rawOut)

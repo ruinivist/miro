@@ -130,6 +130,48 @@ func TestRunRecord(t *testing.T) {
 	})
 }
 
+func TestRunRecordSaveFlagSkipsPrompt(t *testing.T) {
+	testutil.AddFakeRecordDependencies(t, "bwrap", "bash")
+
+	root := t.TempDir()
+	wantDir := filepath.Join(root, "e2e")
+
+	testutil.WithWorkingDir(t, root, func() struct{} {
+		initStdout, initStderr := testutil.CaptureOutput(t, func() {
+			if got := Run([]string{"init"}); got != 0 {
+				t.Fatalf("Run() code = %d, want %d", got, 0)
+			}
+		})
+		if initStdout != prefixed("Done initialising...\n") {
+			t.Fatalf("stdout = %q, want %q", initStdout, prefixed("Done initialising...\n"))
+		}
+		if initStderr != "" {
+			t.Fatalf("stderr = %q, want empty", initStderr)
+		}
+
+		stdout, stderr := testutil.CapturePromptedOutput(t, "exit\n", "", "", func() {
+			if got := Run([]string{"record", "--save", "suite/spec"}); got != 0 {
+				t.Fatalf("Run() code = %d, want %d", got, 0)
+			}
+		})
+
+		createdPath := filepath.Join(wantDir, "suite", "spec")
+		if !strings.Contains(stdout, createdPath) {
+			t.Fatalf("stdout = %q, want created path", stdout)
+		}
+		if strings.Contains(stderr, "Save recording?") {
+			t.Fatalf("stderr = %q, want save prompt omitted", stderr)
+		}
+
+		for _, name := range []string{"in", "out"} {
+			if _, err := os.Stat(filepath.Join(createdPath, name)); err != nil {
+				t.Fatalf("Stat(%q) error = %v", filepath.Join(createdPath, name), err)
+			}
+		}
+		return struct{}{}
+	})
+}
+
 func TestRunRewrite(t *testing.T) {
 	testutil.AddFakeRecordDependencies(t, "bwrap", "bash")
 

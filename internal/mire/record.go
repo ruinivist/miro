@@ -5,9 +5,13 @@ import (
 	"os"
 )
 
+type RecordOptions struct {
+	Save bool
+}
+
 // Record creates the requested scenario path under the resolved test directory
 // and records an interactive shell session into in/out fixtures when saved.
-func Record(path string) (string, error) {
+func Record(path string, opts RecordOptions) (string, error) {
 	root, err := currentProjectRoot()
 	if err != nil {
 		return "", err
@@ -46,7 +50,7 @@ func Record(path string) (string, error) {
 		in:  os.Stdin,
 		out: os.Stdout,
 		err: os.Stderr,
-	}, cfg.Sandbox, cfg.Mounts, cfg.Paths, setupScripts); err != nil {
+	}, cfg.Sandbox, cfg.Mounts, cfg.Paths, setupScripts, opts.Save); err != nil {
 		return "", err
 	}
 

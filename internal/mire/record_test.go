@@ -22,7 +22,7 @@ func TestRecordCreatesRelativePath(t *testing.T) {
 	var got string
 	testutil.WithWorkingDir(t, root, func() struct{} {
 		testutil.CapturePromptedOutput(t, "exit\n", "Save recording?", "y\n", func() {
-			path, err := Record(filepath.Join("a", "b", "c") + string(os.PathSeparator))
+			path, err := Record(filepath.Join("a", "b", "c")+string(os.PathSeparator), RecordOptions{})
 			if err != nil {
 				t.Fatalf("Record() error = %v", err)
 			}
@@ -61,7 +61,7 @@ func TestRecordReturnsDiscardedErrorWhenSaveDeclined(t *testing.T) {
 		target := filepath.Join(testDir, "a", "b", "c")
 		testutil.MustMkdirAll(t, target)
 		return withRecordStreams(t, "exit\nn\n", func(rio recordIO) error {
-			return recordScenario(target, recordShellPath(testDir), rio, defaultSandboxConfig(), nil, nil, nil)
+			return recordScenario(target, recordShellPath(testDir), rio, defaultSandboxConfig(), nil, nil, nil, false)
 		})
 	})
 
@@ -88,7 +88,7 @@ func TestRecordReturnsDiscardedErrorWhenOverwriteDeclined(t *testing.T) {
 
 	err := testutil.WithWorkingDir(t, root, func() error {
 		return withRecordStreams(t, "n\n", func(rio recordIO) error {
-			return recordScenario(target, recordShellPath(testDir), rio, defaultSandboxConfig(), nil, nil, nil)
+			return recordScenario(target, recordShellPath(testDir), rio, defaultSandboxConfig(), nil, nil, nil, false)
 		})
 	})
 
@@ -281,7 +281,7 @@ func TestRecordScenarioUsesDeterministicSandbox(t *testing.T) {
 			"y\n",
 			func(rio recordIO) error {
 				rio.out = ioDiscard{}
-				return recordScenario(target, recordShellPath(testDir), rio, sandboxConfig, nil, nil, nil)
+				return recordScenario(target, recordShellPath(testDir), rio, sandboxConfig, nil, nil, nil, false)
 			},
 		)
 	})
@@ -377,7 +377,7 @@ func TestRecordScenarioStripsInterruptsFromSavedFixtures(t *testing.T) {
 			in:  reader,
 			out: ioDiscard{},
 			err: errWriter,
-		}, defaultSandboxConfig(), nil, nil, nil)
+		}, defaultSandboxConfig(), nil, nil, nil, false)
 		if writeErr := <-writeDone; writeErr != nil {
 			t.Fatalf("write record input: %v", writeErr)
 		}
@@ -412,7 +412,7 @@ func TestRecordFailsWhenRecorderShellMissing(t *testing.T) {
 
 	target := filepath.Join(testDir, "suite", "spec")
 	err := testutil.WithWorkingDir(t, root, func() error {
-		_, err := Record(filepath.Join("suite", "spec"))
+		_, err := Record(filepath.Join("suite", "spec"), RecordOptions{})
 		return err
 	})
 	if err == nil {
