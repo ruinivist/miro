@@ -12,8 +12,9 @@ import (
 
 func newRecordCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:  "record <path>",
-		Args: cobra.ExactArgs(1),
+		Use:   "record <path>",
+		Short: "Record a new CLI scenario",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := filepath.Clean(args[0])
 			createdPath, err := mire.Record(path)

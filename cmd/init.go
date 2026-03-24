@@ -9,8 +9,9 @@ import (
 
 func newInitCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:  "init",
-		Args: cobra.NoArgs,
+		Use:   "init",
+		Short: "Initialise mire in the current project",
+		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := mire.Init(); err != nil {
 				return err

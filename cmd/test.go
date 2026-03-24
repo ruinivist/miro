@@ -8,8 +8,9 @@ import (
 
 func newTestCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:  "test [path]",
-		Args: cobra.MaximumNArgs(1),
+		Use:   "test [path]",
+		Short: "Replay recorded CLI scenarios",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := ""
 			if len(args) == 1 {

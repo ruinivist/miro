@@ -21,8 +21,34 @@ func TestRunShowsHelpWhenNoArgs(t *testing.T) {
 	if !strings.Contains(stdout, "A lean CLI E2E testing framework.") {
 		t.Fatalf("stdout = %q, want root help", stdout)
 	}
-	if !strings.Contains(stdout, "init") || !strings.Contains(stdout, "record") || !strings.Contains(stdout, "test") {
-		t.Fatalf("stdout = %q, want listed subcommands", stdout)
+	for _, want := range []string{
+		"init        Initialise mire in the current project",
+		"record      Record a new CLI scenario",
+		"test        Replay recorded CLI scenarios",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("stdout = %q, want listed subcommand %q", stdout, want)
+		}
+	}
+	if strings.Contains(stdout, "completion") {
+		t.Fatalf("stdout = %q, want hidden completion command", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunCompletionStillWorksWhenHidden(t *testing.T) {
+	testutil.AddFakeRecordDependencies(t, "bwrap", "bash")
+
+	stdout, stderr := testutil.CaptureOutput(t, func() {
+		if got := Run([]string{"completion", "bash"}); got != 0 {
+			t.Fatalf("Run() code = %d, want %d", got, 0)
+		}
+	})
+
+	if !strings.Contains(stdout, "# bash completion V2 for mire") {
+		t.Fatalf("stdout = %q, want bash completion script", stdout)
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)
