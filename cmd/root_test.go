@@ -24,6 +24,7 @@ func TestRunShowsHelpWhenNoArgs(t *testing.T) {
 	for _, want := range []string{
 		"init        Initialise mire in the current project",
 		"record      Record a new CLI scenario",
+		"rewrite     Refresh recorded CLI output fixtures",
 		"test        Replay recorded CLI scenarios",
 	} {
 		if !strings.Contains(stdout, want) {
@@ -127,6 +128,51 @@ func TestRunRecord(t *testing.T) {
 		}
 		return struct{}{}
 	})
+}
+
+func TestRunRewrite(t *testing.T) {
+	testutil.AddFakeRecordDependencies(t, "bwrap", "bash")
+
+	root := t.TempDir()
+	testutil.WriteScenarioFixtures(t, filepath.Join(root, "e2e", "suite", "spec"), "echo rewrite\nexit\n", "stale output\n")
+
+	testutil.WithWorkingDir(t, root, func() struct{} {
+		initStdout, initStderr := testutil.CaptureOutput(t, func() {
+			if got := Run([]string{"init"}); got != 0 {
+				t.Fatalf("Run() code = %d, want %d", got, 0)
+			}
+		})
+		if initStdout != prefixed("Done initialising...\n") {
+			t.Fatalf("stdout = %q, want %q", initStdout, prefixed("Done initialising...\n"))
+		}
+		if initStderr != "" {
+			t.Fatalf("stderr = %q, want empty", initStderr)
+		}
+
+		stdout, stderr := testutil.CaptureOutput(t, func() {
+			if got := Run([]string{"rewrite"}); got != 0 {
+				t.Fatalf("Run() code = %d, want %d", got, 0)
+			}
+		})
+
+		for _, want := range []string{
+			"RUN suite/spec",
+			"PASS suite/spec (",
+			"Summary: total=1 passed=1 failed=0",
+		} {
+			if !strings.Contains(stdout, want) {
+				t.Fatalf("stdout = %q, want substring %q", stdout, want)
+			}
+		}
+		if stderr != "" {
+			t.Fatalf("stderr = %q, want empty", stderr)
+		}
+		return struct{}{}
+	})
+
+	if got := testutil.ReadFile(t, filepath.Join(root, "e2e", "suite", "spec", "out")); got == "stale output\n" {
+		t.Fatalf("rewrite left stale output unchanged")
+	}
 }
 
 func TestRunInitFailsWhenDependenciesMissing(t *testing.T) {

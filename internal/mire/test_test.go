@@ -99,27 +99,15 @@ func TestReplayScenarioUsesRecordedInputAndKeepsReplayOutputQuiet(t *testing.T) 
 	scenarioDir := filepath.Join(testDir, "suite", "spec")
 	testutil.WriteScenarioFixtures(t, scenarioDir, "echo replay\nexit\n", "echo replay\r\nexit\r\n")
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
 	err := replayScenario(testScenario{
 		dir:          scenarioDir,
 		relPath:      filepath.Join("suite", "spec"),
 		inPath:       filepath.Join(scenarioDir, "in"),
 		outPath:      filepath.Join(scenarioDir, "out"),
 		setupScripts: nil,
-	}, shellPath, testIO{
-		out: &stdout,
-		err: &stderr,
-	}, defaultSandboxConfig(), nil, nil)
+	}, shellPath, defaultSandboxConfig(), nil, nil)
 	if err != nil {
 		t.Fatalf("replayScenario() error = %v", err)
-	}
-
-	if stdout.String() != "" {
-		t.Fatalf("stdout = %q, want empty", stdout.String())
-	}
-	if stderr.String() != "" {
-		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
 
@@ -143,10 +131,7 @@ func TestReplayScenarioWaitsForPromptReadyMarkerBeforeSendingInput(t *testing.T)
 		inPath:       filepath.Join(scenarioDir, "in"),
 		outPath:      filepath.Join(scenarioDir, "out"),
 		setupScripts: nil,
-	}, shellPath, testIO{
-		out: &bytes.Buffer{},
-		err: &bytes.Buffer{},
-	}, defaultSandboxConfig(), nil, nil)
+	}, shellPath, defaultSandboxConfig(), nil, nil)
 	if err != nil {
 		t.Fatalf("replayScenario() error = %v", err)
 	}
@@ -168,10 +153,7 @@ func TestReplayScenarioFailsWhenCompareMarkerMissing(t *testing.T) {
 		inPath:       filepath.Join(scenarioDir, "in"),
 		outPath:      filepath.Join(scenarioDir, "out"),
 		setupScripts: nil,
-	}, shellPath, testIO{
-		out: &bytes.Buffer{},
-		err: &bytes.Buffer{},
-	}, defaultSandboxConfig(), nil, nil)
+	}, shellPath, defaultSandboxConfig(), nil, nil)
 	if err == nil {
 		t.Fatal("replayScenario() error = nil, want error")
 	}

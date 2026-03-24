@@ -7,14 +7,11 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
-	"sync"
 	"time"
 
 	"mire/internal/output"
-	"mire/internal/script"
 )
 
 type testIO struct {
@@ -69,45 +66,17 @@ func RunTests(path string) error {
 }
 
 func runTests(path string, tio testIO) error {
-	root, err := currentProjectRoot()
+	suite, err := loadReplaySuite(path)
 	if err != nil {
 		return err
 	}
 
-	cfg, err := readConfigFromRoot(root)
-	if err != nil {
-		return fmt.Errorf("failed to resolve test directory: %v", err)
-	}
-
-	testDir, err := resolveTestDirFromConfig(root, cfg)
-	if err != nil {
-		return fmt.Errorf("failed to resolve test directory: %v", err)
-	}
-
-	discoveryRoot, err := resolveTestDiscoveryRoot(testDir, path)
-	if err != nil {
-		return err
-	}
-
-	shellPath, err := resolveRecordShell(testDir)
-	if err != nil {
-		return err
-	}
-
-	scenarios, err := discoverTestScenarios(discoveryRoot, testDir)
-	if err != nil {
-		return err
-	}
-	if len(scenarios) == 0 {
-		return fmt.Errorf("no test scenarios found in %q", discoveryRoot)
-	}
-
-	summary := testSummary{total: len(scenarios)}
-	for _, scenario := range scenarios {
+	summary := testSummary{total: len(suite.scenarios)}
+	for _, scenario := range suite.scenarios {
 		output.Fprintf(tio.out, "%s %s\n", output.Label("RUN", output.Info), scenario.relPath)
 
 		start := time.Now()
-		if err := replayScenario(scenario, shellPath, tio, cfg.Sandbox, cfg.Mounts, cfg.Paths); err != nil {
+		if err := replayScenario(scenario, suite.shellPath, suite.sandboxConfig, suite.mounts, suite.paths); err != nil {
 			elapsed := time.Since(start)
 			summary.failed++
 			output.Fprintf(tio.out, "%s %s (%s): %v\n", output.Label("FAIL", output.Fail), scenario.relPath, formatElapsed(elapsed), err)
@@ -123,21 +92,25 @@ func runTests(path string, tio testIO) error {
 		output.Fprintf(tio.out, "%s %s (%s)\n", output.Label("PASS", output.Pass), scenario.relPath, formatElapsed(elapsed))
 	}
 
+	writeScenarioSummary(tio.out, summary)
+
+	return nil
+}
+
+func writeScenarioSummary(w io.Writer, summary testSummary) {
 	summaryColor := output.Pass
 	if summary.failed > 0 {
 		summaryColor = output.Fail
 	}
 
 	output.Fprintf(
-		tio.out,
+		w,
 		"%s\n",
 		output.Label(
 			fmt.Sprintf("Summary: total=%d passed=%d failed=%d", summary.total, summary.passed, summary.failed),
 			summaryColor,
 		),
 	)
-
-	return nil
 }
 
 func formatElapsed(elapsed time.Duration) string {
@@ -236,67 +209,8 @@ func discoverTestScenarios(discoveryRoot, displayRoot string) ([]testScenario, e
 	return scenarios, nil
 }
 
-func replayScenario(scenario testScenario, shellPath string, _ testIO, sandboxConfig map[string]string, mounts, paths []string) error {
-	input, err := loadRecordedInput(scenario.inPath)
-	if err != nil {
-		return fmt.Errorf("failed to read recorded input: %v", err)
-	}
-
-	_, rawOut, cleanupFiles, err := newRecordFiles()
-	if err != nil {
-		return fmt.Errorf("failed to prepare replay files: %v", err)
-	}
-	defer cleanupFiles()
-
-	sandbox, cleanupSandbox, err := newRecordSandbox()
-	if err != nil {
-		return fmt.Errorf("failed to prepare replay sandbox: %v", err)
-	}
-	defer cleanupSandbox()
-
-	rawOutFile, err := os.Create(rawOut)
-	if err != nil {
-		return fmt.Errorf("failed to prepare replay output: %v", err)
-	}
-
-	cmd := exec.Command(shellPath)
-	cmd.Dir = scenario.dir
-	cmd.Env = recordSessionEnvWithExtra(sandbox, sandboxConfig, mounts, paths, scenario.setupScripts, map[string]string{
-		compareMarkerEnvName: compareMarkerEnabledValue,
-	})
-
-	ready := make(chan struct{})
-	promptWriter := newReplayPromptWriter(rawOutFile, replayPromptReadyMarker, ready)
-	promptTimeout := time.AfterFunc(replayPromptReadyTimeout, promptWriter.release)
-	defer promptTimeout.Stop()
-
-	replayResult := script.Replay(script.ReplayRequest{
-		Cmd:        cmd,
-		Input:      input,
-		InputReady: ready,
-		OutputLog:  promptWriter,
-	})
-	if err := rawOutFile.Close(); err != nil {
-		return fmt.Errorf("failed to close replay output: %v", err)
-	}
-	if !promptWriter.seen {
-		if err := replayResult.Err(); err != nil {
-			return fmt.Errorf("replay failed: %v", err)
-		}
-		return fmt.Errorf("replay shell never emitted %q; rerun `mire init` or refresh %q", compareOutputMarker, shellPath)
-	}
-	if replayResult.OutputErr != nil {
-		return fmt.Errorf("replay failed: %v", replayResult.OutputErr)
-	}
-	if replayResult.InputErr != nil {
-		return fmt.Errorf("replay failed: %v", replayResult.InputErr)
-	}
-
-	got, err := loadRecordedOutput(rawOut)
-	if err != nil {
-		return fmt.Errorf("failed to read replay output: %v", err)
-	}
-	got, err = trimReplayOutputToMarker(got, shellPath)
+func replayScenario(scenario testScenario, shellPath string, sandboxConfig map[string]string, mounts, paths []string) error {
+	got, err := replayScenarioOutput(scenario, shellPath, sandboxConfig, mounts, paths)
 	if err != nil {
 		return err
 	}
@@ -316,82 +230,4 @@ func replayScenario(scenario testScenario, shellPath string, _ testIO, sandboxCo
 	}
 
 	return nil
-}
-
-func trimReplayOutputToMarker(data []byte, shellPath string) ([]byte, error) {
-	idx := bytes.Index(data, []byte(compareOutputMarker))
-	if idx == -1 {
-		return nil, fmt.Errorf(
-			"missing replay start marker %q in replay output; rerun `mire init` or refresh %q",
-			compareOutputMarker,
-			shellPath,
-		)
-	}
-
-	data = data[idx+len(compareOutputMarker):]
-	switch {
-	case bytes.HasPrefix(data, []byte("\r\n")):
-		return data[2:], nil
-	case bytes.HasPrefix(data, []byte("\n")):
-		return data[1:], nil
-	default:
-		return data, nil
-	}
-}
-
-type replayPromptWriter struct {
-	dst    io.Writer
-	marker []byte
-	tail   []byte
-	ready  chan struct{}
-	once   sync.Once
-	seen   bool
-}
-
-func newReplayPromptWriter(dst io.Writer, marker string, ready chan struct{}) *replayPromptWriter {
-	return &replayPromptWriter{
-		dst:    dst,
-		marker: []byte(marker),
-		ready:  ready,
-	}
-}
-
-func (w *replayPromptWriter) Write(p []byte) (int, error) {
-	n, err := w.dst.Write(p)
-	if n > 0 {
-		w.observe(p[:n])
-	}
-	return n, err
-}
-
-func (w *replayPromptWriter) observe(p []byte) {
-	if w.seen || len(w.marker) == 0 {
-		return
-	}
-
-	data := make([]byte, 0, len(w.tail)+len(p))
-	data = append(data, w.tail...)
-	data = append(data, p...)
-
-	if bytes.Contains(data, w.marker) {
-		w.seen = true
-		w.release()
-	}
-
-	keep := len(w.marker) - 1
-	if keep <= 0 {
-		return
-	}
-	if len(data) <= keep {
-		w.tail = append(w.tail[:0], data...)
-		return
-	}
-
-	w.tail = append(w.tail[:0], data[len(data)-keep:]...)
-}
-
-func (w *replayPromptWriter) release() {
-	w.once.Do(func() {
-		close(w.ready)
-	})
 }
