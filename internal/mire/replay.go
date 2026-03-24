@@ -21,6 +21,16 @@ type replaySuite struct {
 	paths         []string
 }
 
+const (
+	replayBreakDelay         = 100 * time.Millisecond
+	replayVerificationBuffer = 2 * time.Second
+)
+
+type replayOptions struct {
+	runWithBreaks bool
+	timeout       time.Duration
+}
+
 func loadReplaySuite(path string) (replaySuite, error) {
 	root, err := currentProjectRoot()
 	if err != nil {
@@ -66,11 +76,26 @@ func loadReplaySuite(path string) (replaySuite, error) {
 }
 
 func replayScenarioOutput(scenario testScenario, shellPath string, sandboxConfig map[string]string, mounts, paths []string) ([]byte, error) {
-	input, err := loadRecordedInput(scenario.inPath)
+	recordedInput, err := loadRecordedInputFile(scenario.inPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read recorded input: %v", err)
 	}
 
+	return replayScenarioOutputFromInput(scenario, shellPath, sandboxConfig, mounts, paths, recordedInput.data, replayOptions{
+		runWithBreaks: recordedInput.runWithBreaks,
+	})
+}
+
+func replayScenarioOutputWithOptions(scenario testScenario, shellPath string, sandboxConfig map[string]string, mounts, paths []string, opts replayOptions) ([]byte, error) {
+	recordedInput, err := loadRecordedInputFile(scenario.inPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read recorded input: %v", err)
+	}
+
+	return replayScenarioOutputFromInput(scenario, shellPath, sandboxConfig, mounts, paths, recordedInput.data, opts)
+}
+
+func replayScenarioOutputFromInput(scenario testScenario, shellPath string, sandboxConfig map[string]string, mounts, paths []string, input []byte, opts replayOptions) ([]byte, error) {
 	_, rawOut, cleanupFiles, err := newRecordFiles()
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare replay files: %v", err)
@@ -104,6 +129,9 @@ func replayScenarioOutput(scenario testScenario, shellPath string, sandboxConfig
 		Input:      input,
 		InputReady: ready,
 		OutputLog:  promptWriter,
+		DelayInput: opts.runWithBreaks,
+		InputDelay: replayBreakDelay,
+		Timeout:    opts.timeout,
 	})
 	if err := rawOutFile.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close replay output: %v", err)
@@ -113,6 +141,9 @@ func replayScenarioOutput(scenario testScenario, shellPath string, sandboxConfig
 			return nil, fmt.Errorf("replay failed: %v", err)
 		}
 		return nil, fmt.Errorf("replay shell never emitted %q; rerun `mire init` or refresh %q", compareOutputMarker, shellPath)
+	}
+	if replayResult.ProcessErr != nil {
+		return nil, fmt.Errorf("replay failed: %v", replayResult.ProcessErr)
 	}
 	if replayResult.OutputErr != nil {
 		return nil, fmt.Errorf("replay failed: %v", replayResult.OutputErr)
@@ -130,7 +161,6 @@ func replayScenarioOutput(scenario testScenario, shellPath string, sandboxConfig
 	if err != nil {
 		return nil, err
 	}
-
 	return got, nil
 }
 

@@ -24,8 +24,8 @@ func newRecordCommand() *cobra.Command {
 				if errors.Is(err, mire.ErrRecordingDiscarded) {
 					return nil
 				}
-				cmd.PrintErrln(err)
-				return nil
+				cmd.SilenceUsage = true
+				return err
 			}
 
 			output.Println(createdPath)

@@ -42,8 +42,12 @@ func TestRecordCreatesRelativePath(t *testing.T) {
 		}
 	}
 
-	if got := testutil.ReadFile(t, filepath.Join(want, "in")); got != "exit\n" {
-		t.Fatalf("saved in = %q, want %q", got, "exit\n")
+	gotIn, err := loadRecordedInput(filepath.Join(want, "in"))
+	if err != nil {
+		t.Fatalf("loadRecordedInput(saved in) error = %v", err)
+	}
+	if string(gotIn) != "exit\n" {
+		t.Fatalf("saved in = %q, want replay input %q", string(gotIn), "exit\n")
 	}
 	if got := testutil.ReadFile(t, filepath.Join(want, "out")); got != "exit\r\nexit\r\n" {
 		t.Fatalf("saved out = %q, want %q", got, "exit\\r\\nexit\\r\\n")
@@ -146,6 +150,7 @@ func TestBuildRecordShellScriptUsesExpectedCommands(t *testing.T) {
 		`if [ "${MIRE_COMPARE_MARKER:-0}" = "1" ]; then`,
 		"printf '__MIRE_PROMPT_READY__\\n'",
 		"PROMPT_COMMAND=__mire_prompt_ready",
+		"unset MIRE_COMPARE_MARKER",
 		"--bind \"$host_home\" \"$visible_home\"",
 		"--bind \"$host_tmp\" '/tmp'",
 		"--setenv HOME \"$visible_home\"",
@@ -223,6 +228,102 @@ func TestRecordSessionEnvWithExtraIncludesAdditionalEntries(t *testing.T) {
 	}
 	if containsEnvKey(env, "MIRE_SETUP_SCRIPT_BINDS") {
 		t.Fatalf("env = %#v, want MIRE_SETUP_SCRIPT_BINDS omitted", env)
+	}
+}
+
+func TestVerifyRecordedScenarioLeavesInputUnchangedWhenFastWins(t *testing.T) {
+	target := t.TempDir()
+	inPath := filepath.Join(target, "in")
+	recordedIn := []byte("echo hi\n")
+	testutil.WriteFile(t, inPath, string(recordedIn))
+
+	err := verifyRecordedScenario(target, recordedIn, 100*time.Millisecond, func(opts replayOptions) error {
+		if opts.runWithBreaks {
+			time.Sleep(20 * time.Millisecond)
+			return nil
+		}
+
+		time.Sleep(5 * time.Millisecond)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("verifyRecordedScenario() error = %v", err)
+	}
+
+	if got := testutil.ReadFile(t, inPath); got != string(recordedIn) {
+		t.Fatalf("saved in = %q, want %q", got, string(recordedIn))
+	}
+}
+
+func TestVerifyRecordedScenarioWritesMarkerWhenBreakModeWinsAfterFastFailure(t *testing.T) {
+	target := t.TempDir()
+	inPath := filepath.Join(target, "in")
+	recordedIn := []byte("echo hi\n")
+	testutil.WriteFile(t, inPath, string(recordedIn))
+
+	err := verifyRecordedScenario(target, recordedIn, 100*time.Millisecond, func(opts replayOptions) error {
+		if opts.runWithBreaks {
+			time.Sleep(20 * time.Millisecond)
+			return nil
+		}
+
+		time.Sleep(5 * time.Millisecond)
+		return errors.New("fast failed")
+	})
+	if err != nil {
+		t.Fatalf("verifyRecordedScenario() error = %v", err)
+	}
+
+	if got := testutil.ReadFile(t, inPath); got != runWithBreaksMarker+"\n"+string(recordedIn) {
+		t.Fatalf("saved in = %q, want slow marker prefix", got)
+	}
+}
+
+func TestVerifyRecordedScenarioWritesMarkerWhenBreakModeSucceedsFirst(t *testing.T) {
+	target := t.TempDir()
+	inPath := filepath.Join(target, "in")
+	recordedIn := []byte("echo hi\n")
+	testutil.WriteFile(t, inPath, string(recordedIn))
+
+	err := verifyRecordedScenario(target, recordedIn, 100*time.Millisecond, func(opts replayOptions) error {
+		if opts.runWithBreaks {
+			time.Sleep(5 * time.Millisecond)
+			return nil
+		}
+
+		time.Sleep(40 * time.Millisecond)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("verifyRecordedScenario() error = %v", err)
+	}
+
+	if got := testutil.ReadFile(t, inPath); got != runWithBreaksMarker+"\n"+string(recordedIn) {
+		t.Fatalf("saved in = %q, want slow marker prefix", got)
+	}
+}
+
+func TestVerifyRecordedScenarioFailsWhenBothModesFail(t *testing.T) {
+	target := t.TempDir()
+	inPath := filepath.Join(target, "in")
+	recordedIn := []byte("echo hi\n")
+	testutil.WriteFile(t, inPath, string(recordedIn))
+
+	err := verifyRecordedScenario(target, recordedIn, 100*time.Millisecond, func(opts replayOptions) error {
+		if opts.runWithBreaks {
+			time.Sleep(10 * time.Millisecond)
+			return errors.New("slow failed")
+		}
+
+		time.Sleep(5 * time.Millisecond)
+		return errors.New("fast failed")
+	})
+	if !errors.Is(err, errInternalMireFailure) {
+		t.Fatalf("verifyRecordedScenario() error = %v, want errInternalMireFailure", err)
+	}
+
+	if got := testutil.ReadFile(t, inPath); got != string(recordedIn) {
+		t.Fatalf("saved in = %q, want unchanged input", got)
 	}
 }
 

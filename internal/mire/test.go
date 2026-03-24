@@ -214,6 +214,10 @@ func replayScenario(scenario testScenario, shellPath string, ignoreDiffs []strin
 		return err
 	}
 
+	return compareReplayedScenarioOutput(scenario, ignoreDiffs, got)
+}
+
+func compareReplayedScenarioOutput(scenario testScenario, ignoreDiffs []string, got []byte) error {
 	want, err := os.ReadFile(scenario.outPath)
 	if err != nil {
 		return fmt.Errorf("failed to read expected output: %v", err)

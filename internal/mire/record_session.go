@@ -2,11 +2,13 @@ package mire
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"mire/internal/output"
 	"mire/internal/script"
@@ -16,6 +18,20 @@ type recordIO struct {
 	in  io.Reader
 	out io.Writer
 	err io.Writer
+}
+
+var errInternalMireFailure = errors.New("internal mire failure - failed to replicate within time")
+
+type recordVerificationMode int
+
+const (
+	recordVerificationFast recordVerificationMode = iota
+	recordVerificationBreaks
+)
+
+type recordVerificationResult struct {
+	mode recordVerificationMode
+	err  error
 }
 
 func recordScenario(target, shellPath string, rio recordIO, sandboxConfig map[string]string, mounts, paths, setupScripts []string, save bool) error {
@@ -41,9 +57,11 @@ func recordScenario(target, shellPath string, rio recordIO, sandboxConfig map[st
 
 	output.Fprintln(rio.err, "Run commands in the recorder shell, then type exit to finish.")
 
+	recordingStart := time.Now()
 	// this error is intentionally discarded to avoid non zero exit status inside record
 	// as an error
 	runRecordSession(target, rawIn, rawOut, shellPath, sandbox, rio, sandboxConfig, mounts, paths, setupScripts)
+	recordingElapsed := time.Since(recordingStart)
 
 	if !save {
 		save, err = confirmRecordSave(rio)
@@ -68,7 +86,74 @@ func recordScenario(target, shellPath string, rio recordIO, sandboxConfig map[st
 		return err
 	}
 
-	return nil
+	output.Fprintln(rio.err, "Verifying recording...")
+
+	scenario := testScenario{
+		dir:          target,
+		relPath:      target,
+		inPath:       filepath.Join(target, "in"),
+		outPath:      filepath.Join(target, "out"),
+		setupScripts: setupScripts,
+	}
+
+	return verifyRecordedScenario(target, recordedIn, recordingElapsed, func(opts replayOptions) error {
+		_, err := replayScenarioOutputWithOptions(scenario, shellPath, sandboxConfig, mounts, paths, opts)
+		return err
+	})
+}
+
+func countReplayBreaks(data []byte) int {
+	count := 0
+	for _, b := range data {
+		if b == '\n' || b == interruptByte || b == eofByte {
+			count++
+		}
+	}
+
+	return count
+}
+
+func verifyRecordedScenario(target string, recordedIn []byte, recordingElapsed time.Duration, verify func(replayOptions) error) error {
+	results := make(chan recordVerificationResult, 2)
+
+	go func() {
+		results <- recordVerificationResult{
+			mode: recordVerificationFast,
+			err: verify(replayOptions{
+				timeout: recordingElapsed + replayVerificationBuffer,
+			}),
+		}
+	}()
+
+	breakCount := countReplayBreaks(recordedIn)
+	go func() {
+		results <- recordVerificationResult{
+			mode: recordVerificationBreaks,
+			err: verify(replayOptions{
+				runWithBreaks: true,
+				timeout:       recordingElapsed + replayVerificationBuffer + (time.Duration(breakCount) * replayBreakDelay),
+			}),
+		}
+	}()
+
+	failures := 0
+	for failures < 2 {
+		result := <-results
+		if result.err == nil {
+			if result.mode != recordVerificationBreaks {
+				return nil
+			}
+
+			if err := os.WriteFile(filepath.Join(target, "in"), prependRunWithBreaksMarker(recordedIn), 0o644); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		failures++
+	}
+
+	return errInternalMireFailure
 }
 
 func newRecordFiles() (string, string, func(), error) {

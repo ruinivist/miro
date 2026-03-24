@@ -33,6 +33,7 @@ if [ "${MIRE_COMPARE_MARKER:-0}" = "1" ]; then
   }
   PROMPT_COMMAND=__mire_prompt_ready
 fi
+unset MIRE_COMPARE_MARKER
 EOF
 
 # the first ro-bind allows for /usr/bin etc to be mounted and accessible

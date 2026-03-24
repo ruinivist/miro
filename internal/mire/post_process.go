@@ -21,20 +21,70 @@ const (
 
 var interruptSuffix = []byte("^C\x1b[?2004l\r\x1b[?2004h\x1b[?2004l\r\r\n")
 
+const runWithBreaksMarker = "__MIRE_RUN_WITH_BREAKS___"
+
+type recordedInputFile struct {
+	data          []byte
+	runWithBreaks bool
+}
+
 func loadRecordedInput(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
+	recorded, err := loadRecordedInputFile(path)
 	if err != nil {
 		return nil, err
+	}
+
+	return recorded.data, nil
+}
+
+func loadRecordedInputFile(path string) (recordedInputFile, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return recordedInputFile{}, err
 	}
 
 	if hasScriptWrapper(data) {
 		data, err = stripScriptWrapper(data)
 		if err != nil {
-			return nil, err
+			return recordedInputFile{}, err
 		}
 	}
 
-	return trimTrailingReplayNewline(data), nil
+	data = trimTrailingReplayNewline(data)
+
+	return parseRecordedInputFile(data), nil
+}
+
+func parseRecordedInputFile(data []byte) recordedInputFile {
+	recorded := recordedInputFile{data: data}
+
+	switch {
+	case bytes.Equal(data, []byte(runWithBreaksMarker)):
+		recorded.runWithBreaks = true
+		recorded.data = nil
+	case bytes.HasPrefix(data, []byte(runWithBreaksMarker+"\n")):
+		recorded.runWithBreaks = true
+		recorded.data = data[len(runWithBreaksMarker)+1:]
+	case bytes.HasPrefix(data, []byte(runWithBreaksMarker+"\r\n")):
+		recorded.runWithBreaks = true
+		recorded.data = data[len(runWithBreaksMarker)+2:]
+	}
+
+	return recorded
+}
+
+func prependRunWithBreaksMarker(data []byte) []byte {
+	recorded := parseRecordedInputFile(data)
+	if recorded.runWithBreaks {
+		return append([]byte(nil), data...)
+	}
+
+	prefixed := make([]byte, 0, len(runWithBreaksMarker)+1+len(data))
+	prefixed = append(prefixed, runWithBreaksMarker...)
+	prefixed = append(prefixed, '\n')
+	prefixed = append(prefixed, data...)
+
+	return prefixed
 }
 
 func loadRecordedOutput(path string) ([]byte, error) {

@@ -183,6 +183,33 @@ func TestReplayScenarioFailsWhenCompareMarkerMissing(t *testing.T) {
 	}
 }
 
+func TestReplayScenarioFailsWhenReplayTimesOutAfterPromptReady(t *testing.T) {
+	testDir := filepath.Join(t.TempDir(), "e2e")
+	shellPath := filepath.Join(testDir, "shell.sh")
+	testutil.WriteFile(t, shellPath, "#!/bin/sh\nprintf '__MIRE_PROMPT_READY__\\n'\nsleep 1\n")
+	if err := os.Chmod(shellPath, 0o755); err != nil {
+		t.Fatalf("Chmod(%q) error = %v", shellPath, err)
+	}
+	scenarioDir := filepath.Join(testDir, "suite", "spec")
+	testutil.WriteScenarioFixtures(t, scenarioDir, "exit\n", "exit\n")
+
+	_, err := replayScenarioOutputWithOptions(testScenario{
+		dir:          scenarioDir,
+		relPath:      filepath.Join("suite", "spec"),
+		inPath:       filepath.Join(scenarioDir, "in"),
+		outPath:      filepath.Join(scenarioDir, "out"),
+		setupScripts: nil,
+	}, shellPath, defaultSandboxConfig(), nil, nil, replayOptions{
+		timeout: 10 * time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("replayScenarioOutputWithOptions() error = nil, want timeout error")
+	}
+	if !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("replayScenarioOutputWithOptions() error = %q, want context deadline exceeded", err.Error())
+	}
+}
+
 func TestDiscoverTestScenariosUsesDisplayRootForRelativePaths(t *testing.T) {
 	testDir := filepath.Join(t.TempDir(), "e2e")
 	scopedDir := filepath.Join(testDir, "nested")

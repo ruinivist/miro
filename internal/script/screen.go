@@ -13,6 +13,7 @@ package script
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -47,6 +48,9 @@ type ReplayRequest struct {
 	Input      []byte
 	InputReady <-chan struct{}
 	OutputLog  io.Writer
+	DelayInput bool
+	InputDelay time.Duration
+	Timeout    time.Duration
 }
 
 type ReplayResult struct {
@@ -121,9 +125,31 @@ func Replay(req ReplayRequest) ReplayResult {
 
 	outputDone := copyAsync(combineWriters(req.OutputLog), ptmx)
 	processDone := make(chan struct{})
-	inputDone := copyAsyncWhenReady(ptmx, bytes.NewReader(replayInput(req.Input)), req.InputReady, processDone)
+	inputDone := copyReplayInputWhenReady(ptmx, req.Input, req.InputReady, processDone, req.DelayInput, req.InputDelay)
+
+	timedOut := make(chan struct{}, 1)
+	var timeout *time.Timer
+	if req.Timeout > 0 {
+		timeout = time.AfterFunc(req.Timeout, func() {
+			select {
+			case timedOut <- struct{}{}:
+			default:
+			}
+			if req.Cmd.Process != nil {
+				_ = req.Cmd.Process.Kill()
+			}
+		})
+	}
 
 	waitErr := req.Cmd.Wait()
+	if timeout != nil {
+		timeout.Stop()
+	}
+	select {
+	case <-timedOut:
+		waitErr = context.DeadlineExceeded
+	default:
+	}
 	close(processDone)
 	ptmx.Close()
 
@@ -166,8 +192,8 @@ func copyAsync(dst io.Writer, src io.Reader) <-chan error {
 	return done
 }
 
-// copyAsyncWhenReady delays replay input until the child shell is ready enough to receive it reliably.
-func copyAsyncWhenReady(dst io.Writer, src io.Reader, ready <-chan struct{}, stop <-chan struct{}) <-chan error {
+// copyReplayInputWhenReady delays replay input until the child shell is ready enough to receive it reliably.
+func copyReplayInputWhenReady(dst io.Writer, input []byte, ready <-chan struct{}, stop <-chan struct{}, delayInput bool, inputDelay time.Duration) <-chan error {
 	done := make(chan error, 1)
 	go func() {
 		if ready != nil {
@@ -181,22 +207,65 @@ func copyAsyncWhenReady(dst io.Writer, src io.Reader, ready <-chan struct{}, sto
 				return
 			}
 		}
-		_, err := io.Copy(dst, src)
-		done <- normalizeCopyError(err)
+
+		data, appendedEOF := replayInput(input)
+		if !delayInput || inputDelay <= 0 {
+			_, err := io.Copy(dst, bytes.NewReader(data))
+			done <- normalizeCopyError(err)
+			return
+		}
+
+		for i, b := range data {
+			select {
+			case <-stop:
+				done <- nil
+				return
+			default:
+			}
+
+			if _, err := dst.Write([]byte{b}); err != nil {
+				done <- normalizeCopyError(err)
+				return
+			}
+
+			if appendedEOF && i == len(data)-1 {
+				continue
+			}
+			if !shouldDelayReplayByte(b) {
+				continue
+			}
+
+			timer := time.NewTimer(inputDelay)
+			select {
+			case <-timer.C:
+			case <-stop:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				done <- nil
+				return
+			}
+		}
+
+		done <- nil
 	}()
 	return done
 }
 
 // replayInput appends terminal EOF so non-interactive replays still tell the shell when scripted input is finished.
-func replayInput(input []byte) []byte {
+func replayInput(input []byte) ([]byte, bool) {
 	if len(input) > 0 && input[len(input)-1] == terminalEOF {
-		return input
+		return input, false
 	}
 
 	data := make([]byte, 0, len(input)+1)
 	data = append(data, input...)
 	data = append(data, terminalEOF)
-	return data
+	return data, true
+}
+
+func shouldDelayReplayByte(b byte) bool {
+	return b == '\n' || b == 0x03 || b == terminalEOF
 }
 
 // copyInputAsync gives file-backed input an interruptible read loop so shutdown does not hang on blocked stdin reads.

@@ -172,6 +172,40 @@ func TestRunRecordSaveFlagSkipsPrompt(t *testing.T) {
 	})
 }
 
+func TestRunRecordReturnsNonZeroWhenVerificationFails(t *testing.T) {
+	testutil.AddFakeRecordDependencies(t, "bwrap", "bash")
+
+	root := t.TempDir()
+	testDir := filepath.Join(root, "e2e")
+	testutil.WriteValidConfig(t, filepath.Join(root, "mire.toml"), "e2e")
+	testutil.WriteFile(t, filepath.Join(testDir, "shell.sh"), "#!/bin/sh\nexit 0\n")
+	if err := os.Chmod(filepath.Join(testDir, "shell.sh"), 0o755); err != nil {
+		t.Fatalf("Chmod(shell.sh) error = %v", err)
+	}
+
+	testutil.WithWorkingDir(t, root, func() struct{} {
+		testutil.WithStdin(t, "", func() {
+			stdout, stderr := testutil.CaptureOutput(t, func() {
+				if got := Run([]string{"record", "--save", "suite/spec"}); got != 1 {
+					t.Fatalf("Run() code = %d, want %d", got, 1)
+				}
+			})
+
+			if stdout != "" {
+				t.Fatalf("stdout = %q, want empty", stdout)
+			}
+			if !strings.Contains(stderr, "internal mire failure - failed to replicate within time") {
+				t.Fatalf("stderr = %q, want propagated record failure", stderr)
+			}
+			if strings.Contains(stderr, "Usage:") {
+				t.Fatalf("stderr = %q, want usage suppressed", stderr)
+			}
+		})
+
+		return struct{}{}
+	})
+}
+
 func TestRunRewrite(t *testing.T) {
 	testutil.AddFakeRecordDependencies(t, "bwrap", "bash")
 
