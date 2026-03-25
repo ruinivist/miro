@@ -1,0 +1,35 @@
+[?2004h$ mire init
+[?2004l
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Done initialising...
+[?2004h$ mire record --save a
+[?2004l
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Run commands in the recorder shell, then type exit to finish.
+[?2004h$ echo one
+[?2004l
+one
+[?2004h$ exit
+[?2004l
+exit
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Verifying recording...
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m /home/test/e2e/a
+[?2004h$ mire record --save nested/b
+[?2004l
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Run commands in the recorder shell, then type exit to finish.
+[?2004h$ echo two
+[?2004l
+two
+[?2004h$ exit
+[?2004l
+exit
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Verifying recording...
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m /home/test/e2e/nested/b
+[?2004h$ mire test
+[?2004l
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m [38;2;215;255;255mRUN[0m a
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m [38;2;0;215;175mPASS[0m a (12 ms)
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m [38;2;215;255;255mRUN[0m nested/b
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m [38;2;0;215;175mPASS[0m nested/b (12 ms)
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m [38;2;0;215;175mSummary: total=2 passed=2 failed=0[0m
+[?2004h$ exit
+[?2004l
+exit

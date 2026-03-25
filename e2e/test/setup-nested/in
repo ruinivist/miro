@@ -1,0 +1,9 @@
+__MIRE_RUN_WITH_BREAKS___
+mire init
+mkdir -p e2e/suite
+echo export FROM_SETUP=from_setup > e2e/suite/setup.sh
+mire record --save suite/spec
+echo $FROM_SETUP
+exit
+mire test suite
+exit

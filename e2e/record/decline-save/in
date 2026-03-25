@@ -1,0 +1,8 @@
+__MIRE_RUN_WITH_BREAKS___
+mire init
+mire record suite/spec
+echo nope
+exit
+n
+test ! -e e2e/suite/spec/in && test ! -e e2e/suite/spec/out && echo discarded
+exit

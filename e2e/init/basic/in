@@ -1,0 +1,5 @@
+mkdir -p /tmp/project
+cd /tmp/project
+mire init
+test -f mire.toml && test -x e2e/shell.sh && echo ok
+exit

@@ -1,0 +1,18 @@
+[mire]
+  # which folder to strore tests in
+  test_dir = "e2e"
+  # regexes for differing lines to ignore during replay comparison
+  ignore_diffs = [
+    "^.*PASS.*\\([0-9]+ ms\\).*$", # timing diff ms
+    "^.*PASS.*\\([0-9]+\\.[0-9]{2} s\\).*$", # timing diff s
+  ]
+
+[sandbox]
+  # home is where mire would drop you by default on record
+  home = "/home/test"
+  # read only paths from host, entry looks like "path on host:path on sanbox"
+  # paths on host are absolute or relative to repo root
+  mounts = []
+  # read only host paths to expose on PATH inside the sandbox as /tmp/mire/bin/<basename>
+  # paths on host can be absolute or relative to repo root
+  paths = [ "./build/mire" ]

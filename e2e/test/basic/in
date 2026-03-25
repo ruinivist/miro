@@ -1,0 +1,10 @@
+__MIRE_RUN_WITH_BREAKS___
+mire init
+mire record --save a
+echo one
+exit
+mire record --save nested/b
+echo two
+exit
+mire test
+exit

@@ -1,0 +1,7 @@
+__MIRE_RUN_WITH_BREAKS___
+mire init
+mire record --save suite/spec
+echo saved
+exit
+test -f e2e/suite/spec/in && test -f e2e/suite/spec/out && echo fixtures
+exit

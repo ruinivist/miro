@@ -1,0 +1,14 @@
+[?2004h$ mire init
+[?2004l[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Done initialising...
+[?2004h$ mire record --save suite/spec
+[?2004l[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Run commands in the recorder shell, then type exit to finish.
+[?2004h$ echo saved
+[?2004lsaved
+[?2004h$ exit
+[?2004lexit
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Verifying recording...
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m /home/test/e2e/suite/spec
+[?2004h$ test -f e2e/suite/spec/in && test -f e2e/suite/spec/out && echo fixtures
+[?2004lfixtures
+[?2004h$ exit
+[?2004lexit

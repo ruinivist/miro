@@ -1,0 +1,18 @@
+[?2004h$ mire init
+[?2004l[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Done initialising...
+[?2004h$ mkdir -p e2e/suite
+[?2004l[?2004h$ echo export FROM_SETUP=from_setup > e2e/suite/setup.sh
+[?2004l[?2004h$ mire record --save suite/spec
+[?2004l[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Run commands in the recorder shell, then type exit to finish.
+[?2004h$ echo $FROM_SETUP
+[?2004lfrom_setup
+[?2004h$ exit
+[?2004lexit
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m Verifying recording...
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m /home/test/e2e/suite/spec
+[?2004h$ mire test suite
+[?2004l[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m [38;2;215;255;255mRUN[0m suite/spec
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m [38;2;0;215;175mPASS[0m suite/spec (12 ms)
+[1m[3m[38;2;112;224;0mmire[0m [1m[3m[38;2;29;211;176m›[0m [38;2;0;215;175mSummary: total=1 passed=1 failed=0[0m
+[?2004h$ exit
+[?2004lexit

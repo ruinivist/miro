@@ -1,0 +1,20 @@
+[?2004h$ mire
+[?2004lA lean CLI E2E testing framework.
+
+Usage:
+  mire [flags]
+  mire [command]
+
+Available Commands:
+  help        Help about any command
+  init        Initialise mire in the current project
+  record      Record a new CLI scenario
+  rewrite     Refresh recorded CLI output fixtures
+  test        Replay recorded CLI scenarios
+
+Flags:
+  -h, --help   help for mire
+
+Use "mire [command] --help" for more information about a command.
+[?2004h$ exit
+[?2004lexit
